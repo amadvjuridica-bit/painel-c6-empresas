@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Conferência diária de envios | Assis & Mollerke</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body class="master-page">
+    <main class="master-main">
+      <section class="panel master-panel">
+        <div class="section-head">
+          <div>
+            <p class="eyebrow">Conferência diária</p>
+            <h1>Resumo do arquivo de envios</h1>
+          </div>
+          <a class="link-button" href="/master">Voltar ao Master</a>
+        </div>
+        <form action="/envios-dia" method="post" enctype="multipart/form-data" class="upload-form">
+          <label>Arquivo de envios do dia (.csv)
+            <input type="file" name="envios_dia" accept=".csv" required />
+          </label>
+          <button type="submit">Visualizar conferência</button>
+        </form>
+        <div class="master-note">
+          <strong>Uso independente:</strong> esta tela apenas lê o arquivo selecionado e exibe a conferência por lote. Ela não altera o painel principal, não atualiza histórico e não substitui bases.
+        </div>
+      </section>
+    </main>
+  </body>
+</html>

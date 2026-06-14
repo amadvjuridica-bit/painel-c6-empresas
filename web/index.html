@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Painel C6 Empresas | A&M</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <aside class="sidebar">
+      <div class="brand">
+        <img src="assets/logo.png" alt="Assis & Mollerke" />
+      </div>
+      <nav aria-label="Navegação">
+        <a href="#visao-geral">Visão diária</a>
+        <a href="#evolucao">Evolução</a>
+        <a href="#funil">Funil</a>
+        <a href="#horarios">Horários</a>
+        <a href="#contas">Contas abertas</a>
+        <a href="#banco">Banco C6</a>
+      </nav>
+      <div class="confidential">CONFIDENCIAL</div>
+    </aside>
+
+    <main>
+      <header class="topbar" id="visao-geral">
+        <div>
+          <p class="eyebrow">C6 Empresas | WhatsApp</p>
+          <h1>Painel diário de campanhas</h1>
+        </div>
+        <div class="filters">
+          <label>
+            Mês de referência
+            <select id="monthSelect"></select>
+          </label>
+          <label>
+            Dia analisado
+            <select id="daySelect"></select>
+          </label>
+          <button id="bankModeBtn" type="button" title="Alternar visualização somente leitura para o Banco C6">Visão Banco</button>
+          <button id="pdfBtn" type="button" title="Gerar PDF profissional pelo navegador">PDF</button>
+        </div>
+      </header>
+
+      <section class="summary-strip" aria-label="Resumo do dia">
+        <div>
+          <span>Dia analisado</span>
+          <strong id="periodLabel">-</strong>
+        </div>
+        <div>
+          <span>Gerado em</span>
+          <strong id="generatedAt">-</strong>
+        </div>
+        <div>
+          <span>Modo</span>
+          <strong id="modeLabel">Gestão operacional</strong>
+        </div>
+      </section>
+
+      <section class="kpi-grid" id="kpis"></section>
+
+      <section class="panel" id="funil">
+        <div class="section-head">
+          <div>
+            <p class="eyebrow">Funil completo</p>
+            <h2>Conversão do dia selecionado</h2>
+          </div>
+          <button class="export-btn" data-export="funnel">Excel</button>
+        </div>
+        <div class="funnel" id="funnelChart"></div>
+      </section>
+
+      <section class="panel" id="evolucao">
+        <div class="section-head">
+          <div>
+            <p class="eyebrow">Dia a dia</p>
+              <h2>Evolução diária</h2>
+          </div>
+          <button class="export-btn" data-export="daily">Excel</button>
+        </div>
+        <div class="chart-wrap">
+          <svg id="dailyChart" viewBox="0 0 980 280" role="img" aria-label="Evolução diária"></svg>
+        </div>
+      </section>
+
+      <section class="two-col">
+        <section class="panel">
+          <div class="section-head">
+            <div>
+              <p class="eyebrow">Semanal</p>
+              <h2>Evolução por semana</h2>
+            </div>
+            <button class="export-btn" data-export="weekly">Excel</button>
+          </div>
+          <div id="weeklyBars" class="bar-list"></div>
+        </section>
+        <section class="panel">
+          <div class="section-head">
+            <div>
+              <p class="eyebrow">Mensal</p>
+              <h2>Resumo do mês</h2>
+            </div>
+            <button class="export-btn" data-export="monthly">Excel</button>
+          </div>
+          <div id="monthTotals" class="total-grid"></div>
+        </section>
+      </section>
+
+      <section class="panel">
+        <div class="section-head">
+          <div>
+            <p class="eyebrow">Comparativo</p>
+            <h2>Dia a dia</h2>
+          </div>
+          <button class="export-btn" data-export="comparison">Excel</button>
+        </div>
+        <div class="table-wrap">
+          <table id="comparisonTable"></table>
+        </div>
+      </section>
+
+      <section class="panel" id="horarios">
+        <div class="section-head">
+          <div>
+            <p class="eyebrow">Horários</p>
+            <h2>Envios x interações</h2>
+          </div>
+          <button class="export-btn" data-export="hours">Excel</button>
+        </div>
+        <div class="hours-layout">
+          <div id="hourBars" class="hour-ranking"></div>
+          <div class="insights" id="hourInsights"></div>
+        </div>
+      </section>
+
+      <section class="panel" id="contas">
+        <div class="section-head">
+          <div>
+            <p class="eyebrow">Contas abertas</p>
+            <h2>Mês de fundação das empresas</h2>
+          </div>
+          <button class="export-btn" data-export="accounts">Excel</button>
+        </div>
+        <div class="table-wrap">
+          <table id="accountsTable"></table>
+        </div>
+      </section>
+
+      <section class="panel bank" id="banco">
+        <div class="section-head">
+          <div>
+            <p class="eyebrow">Somente leitura</p>
+            <h2>Visualização para o Banco C6</h2>
+          </div>
+        </div>
+        <div class="executive" id="executiveSummary"></div>
+      </section>
+
+      <section class="notes" id="notes"></section>
+
+      <footer class="footer-note">
+        <strong>CONFIDENCIAL.</strong> Relatório de uso restrito. Todos os direitos reservados à Assis & Mollerke.
+      </footer>
+    </main>
+
+    <script src="data.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>

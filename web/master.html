@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Master | Importação C6 Empresas</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body class="master-page">
+    <main class="master-main">
+      <section class="panel master-panel">
+        <div class="section-head">
+          <div>
+            <p class="eyebrow">Acesso Master</p>
+            <h1>Importar arquivos do painel</h1>
+          </div>
+          <div class="pdf-actions">
+            <a class="link-button" href="/envios-dia">Conferir envios do dia</a>
+            <a class="link-button" href="/index.html">Ver painel</a>
+          </div>
+        </div>
+        <form action="/upload" method="post" enctype="multipart/form-data" class="upload-form">
+          <label>Envios WhatsApp (.csv)<input type="file" name="envios" accept=".csv" required /></label>
+          <label>Botões / interações (.csv)<input type="file" name="botoes" accept=".csv" required /></label>
+          <label>Leads enviados (.xlsx)<input type="file" name="leads" accept=".xlsx" required /></label>
+          <label>Visão Cliente (.xlsx)<input type="file" name="visao" accept=".xlsx" required /></label>
+          <button type="submit">Atualizar painel</button>
+        </form>
+        <div class="master-note">
+          <strong>Regra de uso:</strong> o Master importa os arquivos. A visão Banco/Monitor acessa somente o painel atualizado, sem importar bases.
+        </div>
+      </section>
+
+      <section class="panel master-panel email-panel" id="envio-email">
+        <div class="section-head">
+          <div>
+            <p class="eyebrow">Envio do relatório</p>
+            <h2>Enviar PDF por e-mail</h2>
+          </div>
+          <div class="pdf-actions">
+            <a class="link-button" id="pdfV1Link" href="/relatorio_c6_empresas.pdf" target="_blank">Ver PDF V1</a>
+            <a class="link-button" id="pdfV2Link" href="/relatorio_c6_empresas_v2.pdf" target="_blank">Ver PDF V2</a>
+          </div>
+        </div>
+        <form action="/send-email" method="post" class="upload-form email-form">
+          <label class="recipients-field">Destinatários
+            <input type="text" name="to" value="amadvjuridica@gmail.com" required />
+            <span class="field-hint">Separe mais de um e-mail por vírgula. Você pode apagar, trocar ou acrescentar destinatários antes do envio.</span>
+          </label>
+          <label>Cópia automática
+            <input type="email" name="cc" value="am@amcob.com.br" readonly />
+          </label>
+          <label>Assunto
+            <input type="text" name="subject" id="emailSubject" required />
+          </label>
+          <label>Arquivo PDF
+            <select name="pdf_version">
+              <option value="v2" selected>PDF V2 - painel completo</option>
+              <option value="v1">PDF V1 - executivo</option>
+            </select>
+          </label>
+          <label>Mensagem
+            <textarea name="body" rows="8" id="emailBody" required></textarea>
+          </label>
+          <button type="submit">Enviar PDF por e-mail</button>
+        </form>
+      </section>
+    </main>
+    <script src="/data.js"></script>
+    <script>
+      const now = new Date();
+      const date = now.toLocaleDateString("pt-BR");
+      const rows = window.C6_DASHBOARD_DATA?.daily || [];
+      const ref = rows.at(-1)?.date;
+      const refStamp = ref ? ref.replaceAll("-", "") : "referencia";
+      const refDate = ref ? new Date(`${ref}T12:00:00`).toLocaleDateString("pt-BR") : date;
+      document.getElementById("pdfV1Link").href = `/relatorio_c6_empresas_${refStamp}.pdf`;
+      document.getElementById("pdfV1Link").download = `Relatorio_C6_Empresas_${refStamp}.pdf`;
+      document.getElementById("pdfV2Link").href = `/relatorio_c6_empresas_v2_${refStamp}.pdf`;
+      document.getElementById("pdfV2Link").download = `Relatorio_C6_Empresas_V2_${refStamp}.pdf`;
+      document.getElementById("emailSubject").value = `Assis & Mollerke - Relatório C6 Empresas - Referência ${refDate}`;
+      document.getElementById("emailBody").value =
+        `Prezados,
+
+Encaminhamos, em anexo, o relatório de acompanhamento das campanhas WhatsApp C6 Empresas, referente ao dia ${refDate}.
+
+O documento consolida os principais indicadores da operação, contemplando envios, interações, contatos interessados, leads enviados, contas criadas, status de chave Pix e distribuição das contas por mês de fundação das empresas.
+
+As informações foram organizadas para apoiar o acompanhamento executivo da evolução diária e a rastreabilidade do funil, desde a mensageria até a abertura de conta.
+
+Ressaltamos que este material é confidencial e destinado exclusivamente aos destinatários autorizados.
+
+Atenciosamente,
+Assis & Mollerke`;
+    </script>
+  </body>
+</html>

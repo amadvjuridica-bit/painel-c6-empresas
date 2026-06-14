@@ -1,0 +1,35 @@
+services:
+  - type: web
+    name: painel-c6-empresas
+    env: python
+    plan: starter
+    buildCommand: pip install -r requirements.txt
+    startCommand: python app_server.py
+    autoDeploy: true
+    disk:
+      name: painel-c6-empresas-data
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: MASTER_USER
+        value: master
+      - key: MASTER_PASS
+        sync: false
+      - key: MONITOR_USER
+        value: banco
+      - key: MONITOR_PASS
+        sync: false
+      - key: DATA_DIR
+        value: /var/data/data_store
+      - key: UPLOADS_DIR
+        value: /var/data/uploads
+      - key: SMTP_HOST
+        value: mail.amcob.com.br
+      - key: SMTP_PORT
+        value: 465
+      - key: SMTP_USER
+        value: am@amcob.com.br
+      - key: SMTP_PASS
+        sync: false
+      - key: SMTP_CC
+        value: am@amcob.com.br
