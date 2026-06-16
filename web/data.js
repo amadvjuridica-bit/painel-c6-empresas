@@ -1,6 +1,6 @@
 window.C6_DASHBOARD_DATA = {
-  "generatedAt": "2026-06-16T18:40:15",
-  "lastImportAt": "2026-06-16T18:40:15",
+  "generatedAt": "2026-06-16T19:10:19",
+  "lastImportAt": "2026-06-16T19:10:19",
   "sourceFiles": {
     "envios": "C:\\Users\\User\\Documents\\Codex\\2026-05-21\\files-mentioned-by-the-user-botoes\\data_store\\envios_historico.csv",
     "botoes": "C:\\Users\\User\\Documents\\Codex\\2026-05-21\\files-mentioned-by-the-user-botoes\\data_store\\botoes_historico.csv",
@@ -10405,7 +10405,7 @@ window.C6_DASHBOARD_DATA = {
   "analyticAccounts": {
     "file": "C:\\Users\\User\\Documents\\Codex\\2026-05-21\\files-mentioned-by-the-user-botoes\\web\\relatorio_analitico_contas_abertas.xlsx",
     "datedFile": "C:\\Users\\User\\Documents\\Codex\\2026-05-21\\files-mentioned-by-the-user-botoes\\web\\relatorio_analitico_contas_abertas_20260615.xlsx",
-    "rows": 820,
+    "rows": 498,
     "referenceDate": "2026-06-15"
   },
   "foundationMonths": [

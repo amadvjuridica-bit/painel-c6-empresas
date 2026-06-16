@@ -359,6 +359,8 @@ def build_analytic_accounts_excel(botoes, leads, visao, daily):
     report_dates = {row.get("date") for row in daily if row.get("date")}
     if report_dates:
         whatsapp_accounts = whatsapp_accounts[whatsapp_accounts["cohort_date"].isin(report_dates)].copy()
+    reference_month = daily[-1]["month"] if daily else datetime.now().strftime("%Y-%m")
+    whatsapp_accounts = whatsapp_accounts[whatsapp_accounts["cohort_date"].astype(str).str.startswith(reference_month)].copy()
     rows = []
     for _, r in whatsapp_accounts.sort_values(["dt_indicacao", "dt_conta", "cnpj"], na_position="last").iterrows():
         data_indicacao = date_key(r.get("dt_indicacao")) or ""
@@ -412,16 +414,18 @@ def build_analytic_accounts_excel(botoes, leads, visao, daily):
 
     ref = daily[-1]["date"] if daily else datetime.now().strftime("%Y-%m-%d")
     ref_stamp = ref.replace("-", "")
+    monthly_total = sum(int(row.get("opened", 0)) for row in daily if row.get("month") == reference_month)
     out_file = OUT / "relatorio_analitico_contas_abertas.xlsx"
     dated_file = OUT / f"relatorio_analitico_contas_abertas_{ref_stamp}.xlsx"
     summary = pd.DataFrame(
         [
             {"Indicador": "Data de referência", "Valor": ref},
-            {"Indicador": "Total de contas abertas no PDF/painel", "Valor": sum(int(row.get("opened", 0)) for row in daily)},
+            {"Indicador": "Mês de referência", "Valor": reference_month},
+            {"Indicador": "Total de contas abertas no PDF/painel no mês", "Valor": monthly_total},
             {"Indicador": "Total de CNPJs no analítico", "Valor": len(df)},
             {"Indicador": "Contas com chave Pix", "Valor": int((df["Possui chave Pix"] == "Sim").sum())},
             {"Indicador": "Contas sem chave Pix", "Valor": int((df["Possui chave Pix"] != "Sim").sum())},
-            {"Indicador": "Regra", "Valor": "Mesmo critério do PDF: CNPJ único, atribuído à data original da indicação."},
+            {"Indicador": "Regra", "Valor": "Mesmo critério do PDF: CNPJ único, atribuído ao mês original da indicação, não ao mês de abertura."},
         ]
     )
 
