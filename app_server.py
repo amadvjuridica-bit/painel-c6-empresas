@@ -497,6 +497,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         <p>Envios no histórico: {envios_fmt} | Interações no histórico: {botoes_fmt}</p>
         <p>
           <a class="link-button" href="/index.html">Abrir painel</a>
+          <a class="link-button" href="/relatorio_analitico_contas_abertas.xlsx">Baixar Excel analítico</a>
           <a class="link-button" href="/master#envio-email">Enviar relatório por e-mail</a>
         </p>
         </section></main>
@@ -560,6 +561,9 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                 create_report_pdf.build_pdf()
             else:
                 create_report_pdf_v2.build_pdf()
+        excel_path = WEB / f"relatorio_analitico_contas_abertas_{report_reference_date()[1] or 'referencia'}.xlsx"
+        if not excel_path.exists():
+            excel_path = WEB / "relatorio_analitico_contas_abertas.xlsx"
 
         msg = EmailMessage()
         msg["From"] = formataddr(("Assis & Mollerke", SMTP_USER))
@@ -583,6 +587,13 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             subtype="pdf",
             filename=f"Relatorio_C6_Empresas_{report_reference_date()[1] or 'referencia'}.pdf",
         )
+        if excel_path.exists():
+            msg.add_attachment(
+                excel_path.read_bytes(),
+                maintype="application",
+                subtype="vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                filename=f"Relatorio_Analitico_Contas_Abertas_{report_reference_date()[1] or 'referencia'}.xlsx",
+            )
 
         try:
             recipients = list(dict.fromkeys(to_list + cc_list))
@@ -605,7 +616,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         <main class="master-main"><section class="panel master-panel">
         <p class="eyebrow">E-mail enviado</p>
         <h1>Relatório encaminhado com sucesso</h1>
-        <p>O PDF atualizado foi enviado aos destinatários informados, com cópia automática.</p>
+        <p>O PDF V2 e o Excel analítico foram enviados aos destinatários informados, com cópia automática.</p>
         <p><a class="link-button" href="/master#envio-email">Voltar para envio de e-mail</a></p>
         </section></main>
         """

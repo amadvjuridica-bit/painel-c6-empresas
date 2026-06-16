@@ -417,6 +417,10 @@ byId("pdfBtn").addEventListener("click", () => {
   window.open(`/relatorio_c6_empresas_v2_${refStamp()}.pdf?v=${Date.now()}`, "_blank");
 });
 
+byId("analyticBtn").addEventListener("click", () => {
+  window.open(`/relatorio_analitico_contas_abertas_${refStamp()}.xlsx?v=${Date.now()}`, "_blank");
+});
+
 document.addEventListener("click", (event) => {
   const btn = event.target.closest("[data-export]");
   if (btn) downloadExcel(btn.dataset.export);

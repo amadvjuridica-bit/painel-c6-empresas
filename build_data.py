@@ -196,7 +196,16 @@ def attributed_sources(botoes, leads, visao):
         whatsapp_leads[whatsapp_leads["date_indicacao"].notna()]
         .sort_values(["dt_indicacao", "cnpj"])
         .drop_duplicates("cnpj")
-        [["cnpj", "dt_indicacao", "date_indicacao", "phone", "NOME_CLIENTE", "NOME_RESPONSAVEL"]]
+        [[
+            "cnpj",
+            "dt_indicacao",
+            "date_indicacao",
+            "phone",
+            "NOME_CLIENTE",
+            "NOME_RESPONSAVEL",
+            "STATUS_FINAL",
+            "STATUS_ABERTURA_CONTA",
+        ]]
     )
     whatsapp_accounts = visao[visao["cnpj"].isin(set(lead_cohort["cnpj"])) & visao["date_conta"].notna()].copy()
     whatsapp_accounts = whatsapp_accounts.merge(lead_cohort, on="cnpj", how="left", suffixes=("", "_lead"))
@@ -205,6 +214,11 @@ def attributed_sources(botoes, leads, visao):
         & whatsapp_accounts["dt_conta"].notna()
         & (whatsapp_accounts["dt_conta"] >= whatsapp_accounts["dt_indicacao"])
     ].copy()
+    whatsapp_accounts = (
+        whatsapp_accounts.sort_values(["dt_indicacao", "dt_conta", "cnpj"], na_position="last")
+        .drop_duplicates("cnpj")
+        .reset_index(drop=True)
+    )
     whatsapp_accounts["cohort_date"] = whatsapp_accounts["date_indicacao"]
     account_by_day = whatsapp_accounts.groupby("cohort_date")["cnpj"].nunique()
     pix_by_day = whatsapp_accounts[whatsapp_accounts["has_pix"]].groupby("cohort_date")["cnpj"].nunique()
@@ -340,6 +354,93 @@ def build_accounts(botoes, leads, visao):
     return rows
 
 
+def build_analytic_accounts_excel(botoes, leads, visao, daily):
+    _, _, whatsapp_accounts, *_ = attributed_sources(botoes, leads, visao)
+    report_dates = {row.get("date") for row in daily if row.get("date")}
+    if report_dates:
+        whatsapp_accounts = whatsapp_accounts[whatsapp_accounts["cohort_date"].isin(report_dates)].copy()
+    rows = []
+    for _, r in whatsapp_accounts.sort_values(["dt_indicacao", "dt_conta", "cnpj"], na_position="last").iterrows():
+        data_indicacao = date_key(r.get("dt_indicacao")) or ""
+        data_abertura = date_key(r.get("dt_conta")) or ""
+        dias_abertura = ""
+        if pd.notna(r.get("dt_indicacao")) and pd.notna(r.get("dt_conta")):
+            dias_abertura = int((pd.Timestamp(r.get("dt_conta")).normalize() - pd.Timestamp(r.get("dt_indicacao")).normalize()).days)
+        pix_status = safe_text(r.get("pix_status"))
+        rows.append(
+            {
+                "Data da indicação": data_indicacao,
+                "Data da abertura da conta": data_abertura,
+                "CNPJ": cnpj_fmt(r.get("cnpj")),
+                "Razão social": safe_text(r.get("NOME_CLIENTE")) or safe_text(r.get("NOME_CLIENTE_lead")) or safe_text(r.get("NOME_RESPONSAVEL")),
+                "Telefone": safe_text(r.get("phone")),
+                "Status do lead": safe_text(r.get("STATUS_FINAL")),
+                "Status de abertura no lead": safe_text(r.get("STATUS_ABERTURA_CONTA")),
+                "Status da conta": safe_text(r.get("STATUS_CC")),
+                "Possui chave Pix": "Sim" if bool(r.get("has_pix")) else "Não",
+                "Status da chave Pix": pix_status or "Sem chave",
+                "Data de fundação da empresa": date_key(r.get("dt_fundacao")) or "",
+                "CNAE / ramo de atuação": safe_text(r.get("RAMO_ATUACAO")),
+                "Dias entre indicação e abertura": dias_abertura,
+                "Mês de referência": data_indicacao[:7],
+                "Origem do cruzamento": "Telefone WhatsApp > Lead C6 > CNPJ Visão Cliente",
+            }
+        )
+
+    df = pd.DataFrame(rows)
+    columns = [
+        "Data da indicação",
+        "Data da abertura da conta",
+        "CNPJ",
+        "Razão social",
+        "Telefone",
+        "Status do lead",
+        "Status de abertura no lead",
+        "Status da conta",
+        "Possui chave Pix",
+        "Status da chave Pix",
+        "Data de fundação da empresa",
+        "CNAE / ramo de atuação",
+        "Dias entre indicação e abertura",
+        "Mês de referência",
+        "Origem do cruzamento",
+    ]
+    for column in columns:
+        if column not in df:
+            df[column] = ""
+    df = df[columns]
+
+    ref = daily[-1]["date"] if daily else datetime.now().strftime("%Y-%m-%d")
+    ref_stamp = ref.replace("-", "")
+    out_file = OUT / "relatorio_analitico_contas_abertas.xlsx"
+    dated_file = OUT / f"relatorio_analitico_contas_abertas_{ref_stamp}.xlsx"
+    summary = pd.DataFrame(
+        [
+            {"Indicador": "Data de referência", "Valor": ref},
+            {"Indicador": "Total de contas abertas no PDF/painel", "Valor": sum(int(row.get("opened", 0)) for row in daily)},
+            {"Indicador": "Total de CNPJs no analítico", "Valor": len(df)},
+            {"Indicador": "Contas com chave Pix", "Valor": int((df["Possui chave Pix"] == "Sim").sum())},
+            {"Indicador": "Contas sem chave Pix", "Valor": int((df["Possui chave Pix"] != "Sim").sum())},
+            {"Indicador": "Regra", "Valor": "Mesmo critério do PDF: CNPJ único, atribuído à data original da indicação."},
+        ]
+    )
+
+    for target in (out_file, dated_file):
+        with pd.ExcelWriter(target, engine="openpyxl") as writer:
+            df.to_excel(writer, sheet_name="Contas abertas", index=False)
+            summary.to_excel(writer, sheet_name="Resumo", index=False)
+            workbook = writer.book
+            for worksheet in workbook.worksheets:
+                worksheet.freeze_panes = "A2"
+                for column_cells in worksheet.columns:
+                    max_len = max(len(str(cell.value or "")) for cell in column_cells)
+                    width = min(max(max_len + 2, 12), 42)
+                    worksheet.column_dimensions[column_cells[0].column_letter].width = width
+                for cell in worksheet[1]:
+                    cell.font = cell.font.copy(bold=True)
+    return {"file": str(out_file), "datedFile": str(dated_file), "rows": len(df), "referenceDate": ref}
+
+
 def build_foundation_months(accounts):
     rows = {}
     for account in accounts:
@@ -402,6 +503,10 @@ def main():
     envios, envios_all, botoes, leads, visao = load_data()
     daily = build_daily(envios, envios_all, botoes, leads, visao)
     accounts = build_accounts(botoes, leads, visao)
+    report_dates = {row.get("date") for row in daily if row.get("date")}
+    if report_dates:
+        accounts = [account for account in accounts if account.get("dataIndicacao") in report_dates]
+    analytic_accounts = build_analytic_accounts_excel(botoes, leads, visao, daily)
     foundation_months = build_foundation_months(accounts)
     hours = build_hours(envios, botoes)
     campaigns = build_campaigns(envios)
@@ -417,6 +522,7 @@ def main():
         "weekly": aggregate(daily, "week"),
         "monthly": aggregate(daily, "month"),
         "accounts": accounts,
+        "analyticAccounts": analytic_accounts,
         "foundationMonths": foundation_months,
         "hours": hours,
         "campaigns": campaigns,

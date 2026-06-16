@@ -40,6 +40,7 @@
           <div class="pdf-actions">
             <a class="link-button" id="pdfV1Link" href="/relatorio_c6_empresas.pdf" target="_blank">Ver PDF V1</a>
             <a class="link-button" id="pdfV2Link" href="/relatorio_c6_empresas_v2.pdf" target="_blank">Ver PDF V2</a>
+            <a class="link-button" id="analyticExcelLink" href="/relatorio_analitico_contas_abertas.xlsx" target="_blank">Excel analítico</a>
           </div>
         </div>
         <form action="/send-email" method="post" class="upload-form email-form">
@@ -53,11 +54,9 @@
           <label>Assunto
             <input type="text" name="subject" id="emailSubject" required />
           </label>
-          <label>Arquivo PDF
-            <select name="pdf_version">
-              <option value="v2" selected>PDF V2 - painel completo</option>
-              <option value="v1">PDF V1 - executivo</option>
-            </select>
+          <label>Anexos do e-mail
+            <input type="text" value="PDF V2 - painel completo + Excel analítico de contas abertas" readonly />
+            <input type="hidden" name="pdf_version" value="v2" />
           </label>
           <label>Mensagem
             <textarea name="body" rows="8" id="emailBody" required></textarea>
@@ -78,6 +77,8 @@
       document.getElementById("pdfV1Link").download = `Relatorio_C6_Empresas_${refStamp}.pdf`;
       document.getElementById("pdfV2Link").href = `/relatorio_c6_empresas_v2_${refStamp}.pdf`;
       document.getElementById("pdfV2Link").download = `Relatorio_C6_Empresas_V2_${refStamp}.pdf`;
+      document.getElementById("analyticExcelLink").href = `/relatorio_analitico_contas_abertas_${refStamp}.xlsx`;
+      document.getElementById("analyticExcelLink").download = `Relatorio_Analitico_Contas_Abertas_${refStamp}.xlsx`;
       document.getElementById("emailSubject").value = `Assis & Mollerke - Relatório C6 Empresas - Referência ${refDate}`;
       document.getElementById("emailBody").value =
         `Prezados,
