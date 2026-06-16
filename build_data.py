@@ -360,7 +360,6 @@ def build_analytic_accounts_excel(botoes, leads, visao, daily):
     if report_dates:
         whatsapp_accounts = whatsapp_accounts[whatsapp_accounts["cohort_date"].isin(report_dates)].copy()
     reference_month = daily[-1]["month"] if daily else datetime.now().strftime("%Y-%m")
-    whatsapp_accounts = whatsapp_accounts[whatsapp_accounts["cohort_date"].astype(str).str.startswith(reference_month)].copy()
     rows = []
     for _, r in whatsapp_accounts.sort_values(["dt_indicacao", "dt_conta", "cnpj"], na_position="last").iterrows():
         data_indicacao = date_key(r.get("dt_indicacao")) or ""
@@ -422,10 +421,10 @@ def build_analytic_accounts_excel(botoes, leads, visao, daily):
             {"Indicador": "Data de referência", "Valor": ref},
             {"Indicador": "Mês de referência", "Valor": reference_month},
             {"Indicador": "Total de contas abertas no PDF/painel no mês", "Valor": monthly_total},
-            {"Indicador": "Total de CNPJs no analítico", "Valor": len(df)},
+            {"Indicador": "Total geral de CNPJs no analítico", "Valor": len(df)},
             {"Indicador": "Contas com chave Pix", "Valor": int((df["Possui chave Pix"] == "Sim").sum())},
             {"Indicador": "Contas sem chave Pix", "Valor": int((df["Possui chave Pix"] != "Sim").sum())},
-            {"Indicador": "Regra", "Valor": "Mesmo critério do PDF: CNPJ único, atribuído ao mês original da indicação, não ao mês de abertura."},
+            {"Indicador": "Regra", "Valor": "Base completa: CNPJ único atribuído ao WhatsApp, preservando a data original da indicação para filtro por mês."},
         ]
     )
 
