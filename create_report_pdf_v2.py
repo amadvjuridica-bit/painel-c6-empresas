@@ -249,7 +249,7 @@ def build_pdf():
             f"{pct(selected['buttonInteractionRate'])} dos envios positivos. Desse volume, "
             f"{fmt(selected['interactions'])} corresponderam a contatos interessados. "
             f"Também foram identificados {fmt(selected['indicated'])} leads enviados "
-            f"e {fmt(selected['opened'])} contas criadas atribuídas à data original de indicação.",
+            f"e {fmt(selected['opened'])} contas criadas pela data de abertura da conta.",
             styles["V2Body"],
         )
     )

@@ -219,9 +219,10 @@ def attributed_sources(botoes, leads, visao):
         .drop_duplicates("cnpj")
         .reset_index(drop=True)
     )
+    whatsapp_accounts["reference_date"] = whatsapp_accounts["date_conta"]
     whatsapp_accounts["cohort_date"] = whatsapp_accounts["date_indicacao"]
-    account_by_day = whatsapp_accounts.groupby("cohort_date")["cnpj"].nunique()
-    pix_by_day = whatsapp_accounts[whatsapp_accounts["has_pix"]].groupby("cohort_date")["cnpj"].nunique()
+    account_by_day = whatsapp_accounts.groupby("reference_date")["cnpj"].nunique()
+    pix_by_day = whatsapp_accounts[whatsapp_accounts["has_pix"]].groupby("reference_date")["cnpj"].nunique()
 
     return valid_buttons, whatsapp_leads, whatsapp_accounts, daily_interactions, lead_by_day, account_by_day, pix_by_day
 
@@ -246,7 +247,11 @@ def build_daily(envios, envios_all, botoes, leads, visao):
         & envios_all["status_norm"].isin(POSITIVE_SEND_STATUS)
     )
     qualification_by_day = envios_all[qualification_mask].groupby("date").size()
-    dates = sorted(set(envios["date"].dropna()) | set(qualification_by_day.index.dropna()))
+    dates = sorted(
+        set(envios["date"].dropna())
+        | set(qualification_by_day.index.dropna())
+        | set(account_by_day.index.dropna())
+    )
 
     for d in dates:
         e = envios[envios["date"] == d]
@@ -358,8 +363,9 @@ def build_analytic_accounts_excel(botoes, leads, visao, daily):
     _, _, whatsapp_accounts, *_ = attributed_sources(botoes, leads, visao)
     report_dates = {row.get("date") for row in daily if row.get("date")}
     if report_dates:
-        whatsapp_accounts = whatsapp_accounts[whatsapp_accounts["cohort_date"].isin(report_dates)].copy()
+        whatsapp_accounts = whatsapp_accounts[whatsapp_accounts["reference_date"].isin(report_dates)].copy()
     reference_month = daily[-1]["month"] if daily else datetime.now().strftime("%Y-%m")
+    whatsapp_accounts = whatsapp_accounts[whatsapp_accounts["reference_date"].astype(str).str.startswith(reference_month)].copy()
     rows = []
     for _, r in whatsapp_accounts.sort_values(["dt_indicacao", "dt_conta", "cnpj"], na_position="last").iterrows():
         data_indicacao = date_key(r.get("dt_indicacao")) or ""
@@ -383,7 +389,7 @@ def build_analytic_accounts_excel(botoes, leads, visao, daily):
                 "Data de fundação da empresa": date_key(r.get("dt_fundacao")) or "",
                 "CNAE / ramo de atuação": safe_text(r.get("RAMO_ATUACAO")),
                 "Dias entre indicação e abertura": dias_abertura,
-                "Mês de referência": data_indicacao[:7],
+                "Mês de referência": data_abertura[:7],
                 "Origem do cruzamento": "Telefone WhatsApp > Lead C6 > CNPJ Visão Cliente",
             }
         )
@@ -421,10 +427,10 @@ def build_analytic_accounts_excel(botoes, leads, visao, daily):
             {"Indicador": "Data de referência", "Valor": ref},
             {"Indicador": "Mês de referência", "Valor": reference_month},
             {"Indicador": "Total de contas abertas no PDF/painel no mês", "Valor": monthly_total},
-            {"Indicador": "Total geral de CNPJs no analítico", "Valor": len(df)},
+            {"Indicador": "Total de CNPJs no analítico do mês", "Valor": len(df)},
             {"Indicador": "Contas com chave Pix", "Valor": int((df["Possui chave Pix"] == "Sim").sum())},
             {"Indicador": "Contas sem chave Pix", "Valor": int((df["Possui chave Pix"] != "Sim").sum())},
-            {"Indicador": "Regra", "Valor": "Base completa: CNPJ único atribuído ao WhatsApp, preservando a data original da indicação para filtro por mês."},
+            {"Indicador": "Regra", "Valor": "Base do banco: CNPJ único atribuído ao WhatsApp, contado pelo mês de abertura da conta; a data original da indicação fica como rastreabilidade."},
         ]
     )
 
@@ -447,7 +453,7 @@ def build_analytic_accounts_excel(botoes, leads, visao, daily):
 def build_foundation_months(accounts):
     rows = {}
     for account in accounts:
-        open_month = (account.get("dataIndicacao") or "")[:7]
+        open_month = (account.get("dataAbertura") or "")[:7]
         foundation_month = account.get("mesFundacao") or "Sem data"
         if not open_month:
             continue
@@ -508,7 +514,7 @@ def main():
     accounts = build_accounts(botoes, leads, visao)
     report_dates = {row.get("date") for row in daily if row.get("date")}
     if report_dates:
-        accounts = [account for account in accounts if account.get("dataIndicacao") in report_dates]
+        accounts = [account for account in accounts if account.get("dataAbertura") in report_dates]
     analytic_accounts = build_analytic_accounts_excel(botoes, leads, visao, daily)
     foundation_months = build_foundation_months(accounts)
     hours = build_hours(envios, botoes)
@@ -532,7 +538,7 @@ def main():
         "notes": [
             "Campanhas de WhatsApp filtradas por lotes que contem C6 no nome.",
             "Envios medem somente mensageria; resultados comerciais sao atribuidos por telefone unico/dia nos botoes Aceito, Abrir Conta e Abrir Conta - Empresa Antiga.",
-            "Leads WhatsApp sao cruzados por telefone com o Analitico Leads. Contas abertas sao cruzadas por CNPJ na Visao Cliente e atribuidas ao dia original da indicacao.",
+            "Leads WhatsApp sao cruzados por telefone com o Analitico Leads. Contas abertas sao cruzadas por CNPJ na Visao Cliente e contabilizadas pela data de abertura da conta; a data de indicacao fica preservada para rastreabilidade.",
             "Como a Visao Cliente informa o status atual da chave Pix, sem data historica de cadastro, Pix representa contas abertas que ja constam com chave Pix na base.",
         ],
     }

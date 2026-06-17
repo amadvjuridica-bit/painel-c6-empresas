@@ -213,7 +213,7 @@ def build_pdf():
             f"Foram apuradas {fmt(selected['buttonInteractions'])} interações totais, equivalentes a "
             f"{pct(selected['buttonInteractionRate'])} dos envios positivos. Desse volume, {fmt(selected['interactions'])} corresponderam a contatos interessados. "
             f"Também foram identificados {fmt(selected['indicated'])} leads enviados e "
-            f"{fmt(selected['opened'])} contas criadas atribuídas à data original da indicação. No acumulado mensal, "
+            f"{fmt(selected['opened'])} contas criadas pela data de abertura da conta. No acumulado mensal, "
             f"registram-se {fmt(monthly['sent'])} envios, {fmt(monthly['indicated'])} leads enviados e "
             f"{fmt(monthly['opened'])} contas criadas, permitindo o acompanhamento objetivo da evolução da operação.",
             styles["BodyAM"],

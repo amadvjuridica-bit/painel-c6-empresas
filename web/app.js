@@ -285,7 +285,7 @@ function renderExecutive() {
     ["Contas abertas", `${fmt(day.qualificationSent)} envios para clientes que já possuem conta aberta.`],
     ["Interações", `${fmt(day.buttonInteractions)} interações totais, equivalentes a ${pct(day.buttonInteractionRate)} dos envios positivos.`],
     ["Conversão", `${pct(day.openingRate)} dos leads viraram contas criadas no dia selecionado.`],
-    ["Regra de data", "Contas criadas depois são alocadas na data original da indicação."],
+    ["Regra de data", "Contas criadas são contabilizadas pela data de abertura da conta."],
     ["Acumulado mensal", `${fmt(month.sent)} envios, ${fmt(month.indicated)} leads e ${fmt(month.opened)} contas criadas.`],
   ]
     .map(([title, text]) => `<div class="exec-card"><strong>${title}</strong>${text}</div>`)
