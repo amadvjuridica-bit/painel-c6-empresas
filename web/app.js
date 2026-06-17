@@ -102,7 +102,8 @@ function renderKpis() {
     { label: "Interações totais", value: day.buttonInteractions, delta: day.buttonInteractionsDelta },
     { label: "Contatos interessados", value: day.interactions, delta: day.interactionsDelta },
     { label: "Leads enviados", value: day.indicated, delta: day.indicatedDelta },
-    { label: "Contas criadas", value: day.opened, delta: day.openedDelta },
+    { label: "Contas convertidas", value: day.opened, delta: day.openedDelta },
+    { label: "Abertas no período", value: day.openedInPeriod, delta: day.openedInPeriodDelta },
     { label: "Com Pix", value: day.pixOpen, delta: day.pixOpenDelta },
     { label: "% interações", value: day.buttonInteractionRate, previous: prev?.buttonInteractionRate, percent: true },
     { label: "% interesse", value: day.interactionRate, previous: prev?.interactionRate, percent: true },
@@ -129,7 +130,8 @@ function renderFunnel() {
     ["Interações", day.buttonInteractions, pct(day.buttonInteractionRate)],
     ["Interessados", day.interactions, pct(day.interactionRate)],
     ["Leads", day.indicated, pct(day.indicationRate)],
-    ["Contas", day.opened, pct(day.openingRate)],
+    ["Convertidas", day.opened, pct(day.openingRate)],
+    ["Abertas", day.openedInPeriod, "data abertura"],
     ["Pix", day.pixOpen, pct(day.pixRate)],
   ];
   byId("funnelChart").innerHTML = steps
@@ -149,7 +151,7 @@ function pathFor(rows, key, x0, y0, w, h, max) {
 
 function renderDailyChart() {
   const rows = monthRows();
-  const max = Math.max(1, ...rows.map((r) => Math.max(r.indicated, r.opened, r.interactions)));
+  const max = Math.max(1, ...rows.map((r) => Math.max(r.indicated, r.opened, r.openedInPeriod, r.interactions)));
   const x0 = 54;
   const y0 = 24;
   const w = 880;
@@ -167,7 +169,7 @@ function renderDailyChart() {
     ${grid}
     <path class="line-indicated" d="${pathFor(rows, "indicated", x0, y0, w, h, max)}"></path>
     <path class="line-open" d="${pathFor(rows, "opened", x0, y0, w, h, max)}"></path>
-    <text class="chart-label" x="54" y="18">Leads enviados (azul) | Contas criadas (dourado)</text>
+    <text class="chart-label" x="54" y="18">Leads enviados (azul) | Contas convertidas (dourado)</text>
     <text class="chart-label" x="54" y="248">Dias do mês</text>
     ${labels}
   `;
@@ -179,7 +181,7 @@ function renderWeekly() {
   byId("weeklyBars").innerHTML = weeks
     .map((r) => {
       const label = weekDisplay(r);
-      return `<div class="bar-row"><strong>${label}</strong><div class="bar-track"><div class="bar-fill" style="width:${(r.opened / max) * 100}%"></div></div><span>${fmt(r.opened)} contas | ${fmt(r.indicated)} leads | ${fmt(r.interactions)} interessados</span></div>`;
+      return `<div class="bar-row"><strong>${label}</strong><div class="bar-track"><div class="bar-fill" style="width:${(r.opened / max) * 100}%"></div></div><span>${fmt(r.opened)} convertidas | ${fmt(r.openedInPeriod)} abertas | ${fmt(r.indicated)} leads</span></div>`;
     })
     .join("");
 }
@@ -194,7 +196,8 @@ function renderMonthTotals() {
     ["Interações", row.buttonInteractions],
     ["Interessados", row.interactions],
     ["Leads", row.indicated],
-    ["Contas", row.opened],
+    ["Convertidas", row.opened],
+    ["Abertas no período", row.openedInPeriod],
     ["Pix", row.pixOpen],
     ["Conversão", pct(row.openingRate)],
   ]
@@ -227,12 +230,14 @@ function renderComparison() {
       { label: "Interações", key: "buttonInteractions", num: true },
       { label: "Interessados", key: "interactions", num: true },
       { label: "Leads", key: "indicated", num: true },
-      { label: "Contas", key: "opened", num: true },
+      { label: "Convertidas", key: "opened", num: true },
+      { label: "Abertas", key: "openedInPeriod", num: true },
       { label: "Pix", key: "pixOpen", num: true },
       { label: "% interações", value: (r) => pct(r.buttonInteractionRate) },
       { label: "% interesse", value: (r) => pct(r.interactionRate) },
       { label: "% conversão", value: (r) => pct(r.openingRate) },
-      { label: "Variação contas", key: "openedDelta", num: true },
+      { label: "Variação conversões", key: "openedDelta", num: true },
+      { label: "Variação abertas", key: "openedInPeriodDelta", num: true },
     ],
     monthRows()
   );
@@ -269,7 +274,7 @@ function renderAccounts() {
     "accountsTable",
     [
       { label: "Mês de fundação", key: "foundationMonth" },
-      { label: "Contas criadas", key: "opened", num: true },
+      { label: "Abertas no período", key: "opened", num: true },
       { label: "Com Pix", key: "pixOpen", num: true },
       { label: "% Pix", value: (r) => pct((r.pixOpen / Math.max(r.opened, 1)) * 100) },
     ],
@@ -284,9 +289,10 @@ function renderExecutive() {
     ["Resultado diário", `${fmt(day.interactions)} contatos interessados em ${datePt(day.date)}.`],
     ["Contas abertas", `${fmt(day.qualificationSent)} envios para clientes que já possuem conta aberta.`],
     ["Interações", `${fmt(day.buttonInteractions)} interações totais, equivalentes a ${pct(day.buttonInteractionRate)} dos envios positivos.`],
-    ["Conversão", `${pct(day.openingRate)} dos leads viraram contas criadas no dia selecionado.`],
-    ["Regra de data", "Contas criadas são contabilizadas pela data de abertura da conta."],
-    ["Acumulado mensal", `${fmt(month.sent)} envios, ${fmt(month.indicated)} leads e ${fmt(month.opened)} contas criadas.`],
+    ["Conversão", `${pct(day.openingRate)} dos leads viraram contas convertidas pela data da indicação.`],
+    ["Aberturas", `${fmt(day.openedInPeriod)} contas foram abertas pela data real de abertura.`],
+    ["Regra de data", "Conversão usa data da indicação; aberturas do período usam data da abertura da conta."],
+    ["Acumulado mensal", `${fmt(month.sent)} envios, ${fmt(month.indicated)} leads, ${fmt(month.opened)} conversões e ${fmt(month.openedInPeriod)} aberturas.`],
   ]
     .map(([title, text]) => `<div class="exec-card"><strong>${title}</strong>${text}</div>`)
     .join("");
@@ -303,7 +309,8 @@ function tableData(kind) {
     { etapa: "Interações totais", valor: day.buttonInteractions },
     { etapa: "Contatos interessados", valor: day.interactions },
     { etapa: "Leads enviados", valor: day.indicated },
-    { etapa: "Contas criadas", valor: day.opened },
+    { etapa: "Contas convertidas", valor: day.opened },
+    { etapa: "Abertas no período", valor: day.openedInPeriod },
     { etapa: "Com chave Pix", valor: day.pixOpen },
   ];
   const mapRows = (rows) =>
@@ -317,7 +324,8 @@ function tableData(kind) {
       interacoes_totais: r.buttonInteractions,
       contatos_interessados: r.interactions,
       leads_enviados: r.indicated,
-      contas_criadas: r.opened,
+      contas_convertidas: r.opened,
+      contas_abertas_periodo: r.openedInPeriod,
       pix: r.pixOpen,
       perc_interesse: r.interactionRate,
       perc_interacoes_sobre_positivos: r.buttonInteractionRate,

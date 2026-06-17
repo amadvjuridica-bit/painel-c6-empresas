@@ -219,12 +219,14 @@ def attributed_sources(botoes, leads, visao):
         .drop_duplicates("cnpj")
         .reset_index(drop=True)
     )
-    whatsapp_accounts["reference_date"] = whatsapp_accounts["date_conta"]
     whatsapp_accounts["cohort_date"] = whatsapp_accounts["date_indicacao"]
-    account_by_day = whatsapp_accounts.groupby("reference_date")["cnpj"].nunique()
-    pix_by_day = whatsapp_accounts[whatsapp_accounts["has_pix"]].groupby("reference_date")["cnpj"].nunique()
+    whatsapp_accounts["open_date"] = whatsapp_accounts["date_conta"]
+    account_by_day = whatsapp_accounts.groupby("cohort_date")["cnpj"].nunique()
+    pix_by_day = whatsapp_accounts[whatsapp_accounts["has_pix"]].groupby("cohort_date")["cnpj"].nunique()
+    account_by_open_day = whatsapp_accounts.groupby("open_date")["cnpj"].nunique()
+    pix_by_open_day = whatsapp_accounts[whatsapp_accounts["has_pix"]].groupby("open_date")["cnpj"].nunique()
 
-    return valid_buttons, whatsapp_leads, whatsapp_accounts, daily_interactions, lead_by_day, account_by_day, pix_by_day
+    return valid_buttons, whatsapp_leads, whatsapp_accounts, daily_interactions, lead_by_day, account_by_day, pix_by_day, account_by_open_day, pix_by_open_day
 
 
 def build_daily(envios, envios_all, botoes, leads, visao):
@@ -236,6 +238,8 @@ def build_daily(envios, envios_all, botoes, leads, visao):
         lead_by_day,
         account_by_day,
         pix_by_day,
+        account_by_open_day,
+        pix_by_open_day,
     ) = attributed_sources(botoes, leads, visao)
     rows = []
     qualification_mask = (
@@ -251,6 +255,7 @@ def build_daily(envios, envios_all, botoes, leads, visao):
         set(envios["date"].dropna())
         | set(qualification_by_day.index.dropna())
         | set(account_by_day.index.dropna())
+        | set(account_by_open_day.index.dropna())
     )
 
     for d in dates:
@@ -267,6 +272,8 @@ def build_daily(envios, envios_all, botoes, leads, visao):
         indicated = int(lead_by_day.get(d, 0))
         opened = int(account_by_day.get(d, 0))
         pix_open = int(pix_by_day.get(d, 0))
+        opened_in_period = int(account_by_open_day.get(d, 0))
+        pix_open_in_period = int(pix_by_open_day.get(d, 0))
         rows.append(
             {
                 "date": d,
@@ -283,7 +290,10 @@ def build_daily(envios, envios_all, botoes, leads, visao):
                 "indicated": indicated,
                 "opened": opened,
                 "pixOpen": pix_open,
+                "openedInPeriod": opened_in_period,
+                "pixOpenInPeriod": pix_open_in_period,
                 "withoutPix": max(opened - pix_open, 0),
+                "withoutPixInPeriod": max(opened_in_period - pix_open_in_period, 0),
                 "positiveRate": pct(positive, sent),
                 "qualificationRate": pct(qualification_sent, sent),
                 "deliveryRate": pct(delivered, sent),
@@ -294,12 +304,13 @@ def build_daily(envios, envios_all, botoes, leads, visao):
                 "indicationRate": pct(indicated, interactions),
                 "openingRate": pct(opened, indicated),
                 "pixRate": pct(pix_open, opened),
+                "pixInPeriodRate": pct(pix_open_in_period, opened_in_period),
             }
         )
 
     for i, row in enumerate(rows):
         prev = rows[i - 1] if i > 0 else None
-        for key in ["sent", "qualificationSent", "positiveSent", "undelivered", "buttonInteractions", "interactions", "indicated", "opened", "pixOpen", "positiveRate", "qualificationRate", "buttonInteractionRate", "interactionRate", "intentShareRate", "indicationRate", "openingRate", "pixRate"]:
+        for key in ["sent", "qualificationSent", "positiveSent", "undelivered", "buttonInteractions", "interactions", "indicated", "opened", "pixOpen", "openedInPeriod", "pixOpenInPeriod", "positiveRate", "qualificationRate", "buttonInteractionRate", "interactionRate", "intentShareRate", "indicationRate", "openingRate", "pixRate", "pixInPeriodRate"]:
             row[f"{key}Delta"] = round(row[key] - (prev[key] if prev else 0), 2)
     return rows
 
@@ -310,10 +321,10 @@ def aggregate(rows, by):
         key = row[by]
         acc = groups.setdefault(
             key,
-            {"period": key, "sent": 0, "qualificationSent": 0, "positiveSent": 0, "undelivered": 0, "delivered": 0, "read": 0, "buttonInteractions": 0, "interactions": 0, "indicated": 0, "opened": 0, "pixOpen": 0, "dates": []},
+            {"period": key, "sent": 0, "qualificationSent": 0, "positiveSent": 0, "undelivered": 0, "delivered": 0, "read": 0, "buttonInteractions": 0, "interactions": 0, "indicated": 0, "opened": 0, "pixOpen": 0, "openedInPeriod": 0, "pixOpenInPeriod": 0, "dates": []},
         )
         acc["dates"].append(row["date"])
-        for metric in ["sent", "qualificationSent", "positiveSent", "undelivered", "delivered", "read", "buttonInteractions", "interactions", "indicated", "opened", "pixOpen"]:
+        for metric in ["sent", "qualificationSent", "positiveSent", "undelivered", "delivered", "read", "buttonInteractions", "interactions", "indicated", "opened", "pixOpen", "openedInPeriod", "pixOpenInPeriod"]:
             acc[metric] += row[metric]
     out = []
     for key in sorted(groups):
@@ -330,6 +341,7 @@ def aggregate(rows, by):
         row["indicationRate"] = pct(row["indicated"], row["interactions"])
         row["openingRate"] = pct(row["opened"], row["indicated"])
         row["pixRate"] = pct(row["pixOpen"], row["opened"])
+        row["pixInPeriodRate"] = pct(row["pixOpenInPeriod"], row["openedInPeriod"])
         out.append(row)
     return out
 
@@ -363,9 +375,9 @@ def build_analytic_accounts_excel(botoes, leads, visao, daily):
     _, _, whatsapp_accounts, *_ = attributed_sources(botoes, leads, visao)
     report_dates = {row.get("date") for row in daily if row.get("date")}
     if report_dates:
-        whatsapp_accounts = whatsapp_accounts[whatsapp_accounts["reference_date"].isin(report_dates)].copy()
+        whatsapp_accounts = whatsapp_accounts[whatsapp_accounts["open_date"].isin(report_dates)].copy()
     reference_month = daily[-1]["month"] if daily else datetime.now().strftime("%Y-%m")
-    whatsapp_accounts = whatsapp_accounts[whatsapp_accounts["reference_date"].astype(str).str.startswith(reference_month)].copy()
+    whatsapp_accounts = whatsapp_accounts[whatsapp_accounts["open_date"].astype(str).str.startswith(reference_month)].copy()
     rows = []
     for _, r in whatsapp_accounts.sort_values(["dt_indicacao", "dt_conta", "cnpj"], na_position="last").iterrows():
         data_indicacao = date_key(r.get("dt_indicacao")) or ""
@@ -389,6 +401,8 @@ def build_analytic_accounts_excel(botoes, leads, visao, daily):
                 "Data de fundação da empresa": date_key(r.get("dt_fundacao")) or "",
                 "CNAE / ramo de atuação": safe_text(r.get("RAMO_ATUACAO")),
                 "Dias entre indicação e abertura": dias_abertura,
+                "Mês da indicação": data_indicacao[:7],
+                "Mês da abertura": data_abertura[:7],
                 "Mês de referência": data_abertura[:7],
                 "Origem do cruzamento": "Telefone WhatsApp > Lead C6 > CNPJ Visão Cliente",
             }
@@ -409,6 +423,8 @@ def build_analytic_accounts_excel(botoes, leads, visao, daily):
         "Data de fundação da empresa",
         "CNAE / ramo de atuação",
         "Dias entre indicação e abertura",
+        "Mês da indicação",
+        "Mês da abertura",
         "Mês de referência",
         "Origem do cruzamento",
     ]
@@ -419,18 +435,20 @@ def build_analytic_accounts_excel(botoes, leads, visao, daily):
 
     ref = daily[-1]["date"] if daily else datetime.now().strftime("%Y-%m-%d")
     ref_stamp = ref.replace("-", "")
-    monthly_total = sum(int(row.get("opened", 0)) for row in daily if row.get("month") == reference_month)
+    monthly_conversion_total = sum(int(row.get("opened", 0)) for row in daily if row.get("month") == reference_month)
+    monthly_open_total = sum(int(row.get("openedInPeriod", 0)) for row in daily if row.get("month") == reference_month)
     out_file = OUT / "relatorio_analitico_contas_abertas.xlsx"
     dated_file = OUT / f"relatorio_analitico_contas_abertas_{ref_stamp}.xlsx"
     summary = pd.DataFrame(
         [
             {"Indicador": "Data de referência", "Valor": ref},
             {"Indicador": "Mês de referência", "Valor": reference_month},
-            {"Indicador": "Total de contas abertas no PDF/painel no mês", "Valor": monthly_total},
-            {"Indicador": "Total de CNPJs no analítico do mês", "Valor": len(df)},
+            {"Indicador": "Contas convertidas no mês por data da indicação", "Valor": monthly_conversion_total},
+            {"Indicador": "Contas abertas no mês por data da abertura", "Valor": monthly_open_total},
+            {"Indicador": "Total de CNPJs no analítico do mês de abertura", "Valor": len(df)},
             {"Indicador": "Contas com chave Pix", "Valor": int((df["Possui chave Pix"] == "Sim").sum())},
             {"Indicador": "Contas sem chave Pix", "Valor": int((df["Possui chave Pix"] != "Sim").sum())},
-            {"Indicador": "Regra", "Valor": "Base do banco: CNPJ único atribuído ao WhatsApp, contado pelo mês de abertura da conta; a data original da indicação fica como rastreabilidade."},
+            {"Indicador": "Regra", "Valor": "Excel do banco: CNPJ único atribuído ao WhatsApp, filtrado pelo mês de abertura da conta. A data original da indicação fica preservada para medir conversão."},
         ]
     )
 
@@ -538,7 +556,7 @@ def main():
         "notes": [
             "Campanhas de WhatsApp filtradas por lotes que contem C6 no nome.",
             "Envios medem somente mensageria; resultados comerciais sao atribuidos por telefone unico/dia nos botoes Aceito, Abrir Conta e Abrir Conta - Empresa Antiga.",
-            "Leads WhatsApp sao cruzados por telefone com o Analitico Leads. Contas abertas sao cruzadas por CNPJ na Visao Cliente e contabilizadas pela data de abertura da conta; a data de indicacao fica preservada para rastreabilidade.",
+            "Leads WhatsApp sao cruzados por telefone com o Analitico Leads. A conversao principal e calculada pela data original da indicacao. A metrica de contas abertas no periodo usa a data de abertura da conta na Visao Cliente.",
             "Como a Visao Cliente informa o status atual da chave Pix, sem data historica de cadastro, Pix representa contas abertas que ja constam com chave Pix na base.",
         ],
     }
