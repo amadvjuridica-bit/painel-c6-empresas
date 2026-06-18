@@ -191,19 +191,21 @@ def build_pdf():
                 ("Interações totais", fmt(selected["buttonInteractions"]), f"{pct(selected['buttonInteractionRate'])} dos positivos"),
                 ("Contatos interessados", fmt(selected["interactions"]), f"{pct(selected['interactionRate'])} dos positivos"),
                 ("Leads enviados", fmt(selected["indicated"]), f"{pct(selected['indicationRate'])} dos interessados"),
-                ("Contas criadas", fmt(selected["opened"]), f"{pct(selected['openingRate'])} dos leads"),
-                ("Com Pix", fmt(selected["pixOpen"]), f"{pct(selected['pixRate'])} das contas"),
-                ("% conversão mês", pct(monthly["openingRate"]), f"{fmt(monthly['opened'])} contas"),
+                ("Contas convertidas", fmt(selected["opened"]), f"{pct(selected['openingRate'])} dos leads"),
+                ("Abertas no período", fmt(selected["openedInPeriod"]), "pela data da abertura"),
+                ("Pix conv.", fmt(selected["pixOpen"]), f"{pct(selected['pixRate'])} das convertidas"),
+                ("Pix abertas", fmt(selected["pixOpenInPeriod"]), f"{pct(selected['pixInPeriodRate'])} das abertas"),
+                ("% conversão mês", pct(monthly["openingRate"]), f"{fmt(monthly['opened'])} conversões"),
             ]
         )
     )
 
     story.append(Paragraph("Funil de conversão", styles["SectionAM"]))
     funnel = [
-        ["Envios", "Contas abertas", "Positivos", "Lidos", "Interações", "Interessados", "Leads", "Contas", "Pix"],
-        [fmt(selected[k]) for k in ["sent", "qualificationSent", "positiveSent", "read", "buttonInteractions", "interactions", "indicated", "opened", "pixOpen"]],
+        ["Envios", "Contas abertas", "Positivos", "Lidos", "Interações", "Interessados", "Leads", "Convertidas", "Abertas", "Pix conv.", "Pix abertas"],
+        [fmt(selected[k]) for k in ["sent", "qualificationSent", "positiveSent", "read", "buttonInteractions", "interactions", "indicated", "opened", "openedInPeriod", "pixOpen", "pixOpenInPeriod"]],
     ]
-    story.append(table(funnel, [2.7 * cm] * 9, 7.5, first_col_left=False))
+    story.append(table(funnel, [2.2 * cm] * 11, 7.5, first_col_left=False))
 
     story.append(Paragraph("Resumo executivo", styles["SectionAM"]))
     story.append(
@@ -212,17 +214,18 @@ def build_pdf():
             f"{date_pt(selected['date'])}. Também foram realizados {fmt(selected['qualificationSent'])} envios para clientes com conta aberta. "
             f"Foram apuradas {fmt(selected['buttonInteractions'])} interações totais, equivalentes a "
             f"{pct(selected['buttonInteractionRate'])} dos envios positivos. Desse volume, {fmt(selected['interactions'])} corresponderam a contatos interessados. "
-            f"Também foram identificados {fmt(selected['indicated'])} leads enviados e "
-            f"{fmt(selected['opened'])} contas criadas pela data de abertura da conta. No acumulado mensal, "
+            f"Também foram identificados {fmt(selected['indicated'])} leads enviados, "
+            f"{fmt(selected['opened'])} contas convertidas pela data original da indicação e "
+            f"{fmt(selected['openedInPeriod'])} contas abertas pela data real de abertura. No acumulado mensal, "
             f"registram-se {fmt(monthly['sent'])} envios, {fmt(monthly['indicated'])} leads enviados e "
-            f"{fmt(monthly['opened'])} contas criadas, permitindo o acompanhamento objetivo da evolução da operação.",
+            f"{fmt(monthly['opened'])} contas convertidas, além de {fmt(monthly['openedInPeriod'])} contas abertas no período.",
             styles["BodyAM"],
         )
     )
 
     story.append(PageBreak())
     story.append(Paragraph("Comparativo dia a dia", styles["SectionAM"]))
-    daily_table = [["Data", "Envios", "Base aberta", "Positivos", "Não env.", "Interações", "Interessados", "Leads", "Contas", "Pix", "% Inter.", "% Interesse", "% Conv."]]
+    daily_table = [["Data", "Envios", "Base aberta", "Positivos", "Não env.", "Interações", "Interessados", "Leads", "Convert.", "Abertas", "Pix conv.", "Pix abertas", "% Inter.", "% Interesse", "% Conv."]]
     for r in daily:
         daily_table.append(
             [
@@ -235,24 +238,26 @@ def build_pdf():
                 fmt(r["interactions"]),
                 fmt(r["indicated"]),
                 fmt(r["opened"]),
+                fmt(r["openedInPeriod"]),
                 fmt(r["pixOpen"]),
+                fmt(r["pixOpenInPeriod"]),
                 pct(r["buttonInteractionRate"]),
                 pct(r["interactionRate"]),
                 pct(r["openingRate"]),
             ]
         )
-    story.append(table(daily_table, [1.75 * cm, 1.85 * cm, 1.9 * cm, 1.85 * cm, 1.75 * cm, 1.85 * cm, 2.0 * cm, 1.55 * cm, 1.5 * cm, 1.3 * cm, 1.45 * cm, 1.55 * cm, 1.5 * cm], 6.0))
+    story.append(table(daily_table, [1.5 * cm, 1.6 * cm, 1.6 * cm, 1.6 * cm, 1.35 * cm, 1.6 * cm, 1.7 * cm, 1.3 * cm, 1.3 * cm, 1.3 * cm, 1.2 * cm, 1.2 * cm, 1.25 * cm, 1.35 * cm, 1.25 * cm], 5.2))
 
     story.append(Paragraph("Evolução semanal e mensal", styles["SectionAM"]))
     weeks = [w for w in payload["weekly"] if any(d["week"] == w["period"] for d in daily)]
-    weekly_table = [["Período", "Envios", "Base aberta", "Positivos", "Interações", "Interessados", "Leads", "Contas", "Pix"]]
+    weekly_table = [["Período", "Envios", "Base aberta", "Positivos", "Interações", "Interessados", "Leads", "Convert.", "Abertas", "Pix conv.", "Pix abertas"]]
     for w in weeks:
-        weekly_table.append([week_name(w), fmt(w["sent"]), fmt(w["qualificationSent"]), fmt(w["positiveSent"]), fmt(w["buttonInteractions"]), fmt(w["interactions"]), fmt(w["indicated"]), fmt(w["opened"]), fmt(w["pixOpen"])])
-    weekly_table.append([monthly.get("label") or month_pt(month), fmt(monthly["sent"]), fmt(monthly["qualificationSent"]), fmt(monthly["positiveSent"]), fmt(monthly["buttonInteractions"]), fmt(monthly["interactions"]), fmt(monthly["indicated"]), fmt(monthly["opened"]), fmt(monthly["pixOpen"])])
-    story.append(table(weekly_table, [4.5 * cm, 2.4 * cm, 2.5 * cm, 2.4 * cm, 2.5 * cm, 2.55 * cm, 2.0 * cm, 2.0 * cm, 1.75 * cm], 6.8))
+        weekly_table.append([week_name(w), fmt(w["sent"]), fmt(w["qualificationSent"]), fmt(w["positiveSent"]), fmt(w["buttonInteractions"]), fmt(w["interactions"]), fmt(w["indicated"]), fmt(w["opened"]), fmt(w["openedInPeriod"]), fmt(w["pixOpen"]), fmt(w["pixOpenInPeriod"])])
+    weekly_table.append([monthly.get("label") or month_pt(month), fmt(monthly["sent"]), fmt(monthly["qualificationSent"]), fmt(monthly["positiveSent"]), fmt(monthly["buttonInteractions"]), fmt(monthly["interactions"]), fmt(monthly["indicated"]), fmt(monthly["opened"]), fmt(monthly["openedInPeriod"]), fmt(monthly["pixOpen"]), fmt(monthly["pixOpenInPeriod"])])
+    story.append(table(weekly_table, [3.55 * cm, 1.9 * cm, 2.0 * cm, 1.9 * cm, 2.0 * cm, 2.1 * cm, 1.55 * cm, 1.55 * cm, 1.55 * cm, 1.35 * cm, 1.35 * cm], 6.0))
 
-    story.append(Paragraph("Mês de fundação das empresas com conta criada", styles["SectionAM"]))
-    foundation_table = [["Mês de fundação", "Contas criadas", "Com Pix", "% Pix"]]
+    story.append(Paragraph("Mês de fundação das empresas com conta aberta no período", styles["SectionAM"]))
+    foundation_table = [["Mês de fundação", "Abertas no período", "Com Pix", "% Pix"]]
     for a in foundation:
         pix_rate = (a["pixOpen"] / a["opened"] * 100) if a["opened"] else 0
         foundation_table.append([a["foundationMonth"], fmt(a["opened"]), fmt(a["pixOpen"]), pct(pix_rate)])
