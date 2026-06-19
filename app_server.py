@@ -1,6 +1,7 @@
 import base64
 import cgi
 import html
+import importlib
 import json
 import os
 import smtplib
@@ -40,6 +41,13 @@ CONSOLIDATED = {
     "leads": DATA_STORE / "leads_atual.xlsx",
     "visao": DATA_STORE / "visao_atual.xlsx",
 }
+
+
+def reload_processing_modules():
+    global build_data, create_report_pdf, create_report_pdf_v2
+    build_data = importlib.reload(build_data)
+    create_report_pdf = importlib.reload(create_report_pdf)
+    create_report_pdf_v2 = importlib.reload(create_report_pdf_v2)
 
 
 def split_addresses(value):
@@ -456,6 +464,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                 saved[field] = target
 
             consolidated = update_consolidated_files(saved)
+            reload_processing_modules()
             build_data.FILES["envios"] = consolidated["envios"]
             build_data.FILES["botoes"] = consolidated["botoes"]
             build_data.FILES["leads"] = consolidated["leads"]
@@ -557,6 +566,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         pdf_version = (form.getfirst("pdf_version") or "v2").strip().lower()
         pdf_path = WEB / ("relatorio_c6_empresas.pdf" if pdf_version == "v1" else "relatorio_c6_empresas_v2.pdf")
         if not pdf_path.exists():
+            reload_processing_modules()
             if pdf_version == "v1":
                 create_report_pdf.build_pdf()
             else:
