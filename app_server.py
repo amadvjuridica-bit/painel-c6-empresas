@@ -11,12 +11,6 @@ from email.utils import formataddr, formatdate, getaddresses, make_msgid
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-import pandas as pd
-
-import build_data
-import create_report_pdf
-import create_report_pdf_v2
-
 
 ROOT = Path(__file__).resolve().parent
 WEB = ROOT / "web"
@@ -43,11 +37,38 @@ CONSOLIDATED = {
 }
 
 
+pd = None
+build_data = None
+create_report_pdf = None
+create_report_pdf_v2 = None
+
+
+def get_pandas():
+    global pd
+    if pd is None:
+        import pandas as pandas_module
+
+        pd = pandas_module
+    return pd
+
+
 def reload_processing_modules():
     global build_data, create_report_pdf, create_report_pdf_v2
-    build_data = importlib.reload(build_data)
-    create_report_pdf = importlib.reload(create_report_pdf)
-    create_report_pdf_v2 = importlib.reload(create_report_pdf_v2)
+    if build_data is None:
+        import build_data as build_data_module
+    else:
+        build_data_module = importlib.reload(build_data)
+    if create_report_pdf is None:
+        import create_report_pdf as create_report_pdf_module
+    else:
+        create_report_pdf_module = importlib.reload(create_report_pdf)
+    if create_report_pdf_v2 is None:
+        import create_report_pdf_v2 as create_report_pdf_v2_module
+    else:
+        create_report_pdf_v2_module = importlib.reload(create_report_pdf_v2)
+    build_data = build_data_module
+    create_report_pdf = create_report_pdf_module
+    create_report_pdf_v2 = create_report_pdf_v2_module
 
 
 def split_addresses(value):
@@ -103,6 +124,7 @@ def report_reference_date():
 
 
 def dashboard_health_payload():
+    pandas = get_pandas()
     text = (WEB / "data.js").read_text(encoding="utf-8")
     match = __import__("re").search(r"window\.C6_DASHBOARD_DATA\s*=\s*(.*);\s*$", text, __import__("re").S)
     payload = json.loads(match.group(1))
@@ -119,7 +141,7 @@ def dashboard_health_payload():
     excel_unique_cnpj = None
     if excel_path.exists():
         try:
-            df = pd.read_excel(excel_path, sheet_name="Contas abertas", dtype=str)
+            df = pandas.read_excel(excel_path, sheet_name="Contas abertas", dtype=str)
             excel_rows = int(len(df))
             excel_unique_cnpj = int(df["CNPJ"].nunique()) if "CNPJ" in df.columns else None
         except Exception:
@@ -172,12 +194,13 @@ def seed_history_from_existing_uploads():
 
 
 def merge_csv_history(imported_path, target_path, sep):
+    pandas = get_pandas()
     if target_path.exists():
-        current = pd.read_csv(target_path, sep=sep, dtype=str, encoding="utf-8")
-        incoming = pd.read_csv(imported_path, sep=sep, dtype=str, encoding="utf-8")
-        merged = pd.concat([current, incoming], ignore_index=True)
+        current = pandas.read_csv(target_path, sep=sep, dtype=str, encoding="utf-8")
+        incoming = pandas.read_csv(imported_path, sep=sep, dtype=str, encoding="utf-8")
+        merged = pandas.concat([current, incoming], ignore_index=True)
     else:
-        merged = pd.read_csv(imported_path, sep=sep, dtype=str, encoding="utf-8")
+        merged = pandas.read_csv(imported_path, sep=sep, dtype=str, encoding="utf-8")
     merged = merged.drop_duplicates().reset_index(drop=True)
     merged.to_csv(target_path, sep=sep, index=False, encoding="utf-8")
     return len(merged)
@@ -200,10 +223,11 @@ def update_consolidated_files(saved):
 
 
 def read_envios_csv(path):
+    pandas = get_pandas()
     try:
-        return pd.read_csv(path, sep=";", dtype=str, encoding="utf-8")
+        return pandas.read_csv(path, sep=";", dtype=str, encoding="utf-8")
     except UnicodeDecodeError:
-        return pd.read_csv(path, sep=";", dtype=str, encoding="latin1")
+        return pandas.read_csv(path, sep=";", dtype=str, encoding="latin1")
 
 
 def status_key(value):
@@ -214,6 +238,7 @@ def status_key(value):
 
 
 def build_envios_day_rows(uploaded_path):
+    pandas = get_pandas()
     df = read_envios_csv(uploaded_path)
     required = ["message_date_time", "broadcast_description", "message_status", "intention_description"]
     missing = [col for col in required if col not in df.columns]
@@ -221,7 +246,7 @@ def build_envios_day_rows(uploaded_path):
         raise ValueError(f"Colunas ausentes no arquivo de envios: {', '.join(missing)}")
 
     df = df.copy()
-    df["dt"] = pd.to_datetime(df["message_date_time"], errors="coerce", dayfirst=True)
+    df["dt"] = pandas.to_datetime(df["message_date_time"], errors="coerce", dayfirst=True)
     df["hora_envio"] = df["dt"].dt.strftime("%H:%M")
     df["status_clean"] = df["message_status"].map(status_key)
     df["broadcast_description"] = df["broadcast_description"].fillna("").astype(str).str.strip()
