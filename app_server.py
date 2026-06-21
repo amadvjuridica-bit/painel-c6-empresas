@@ -102,6 +102,54 @@ def report_reference_date():
     return "", ""
 
 
+def dashboard_health_payload():
+    text = (WEB / "data.js").read_text(encoding="utf-8")
+    match = __import__("re").search(r"window\.C6_DASHBOARD_DATA\s*=\s*(.*);\s*$", text, __import__("re").S)
+    payload = json.loads(match.group(1))
+    daily = payload.get("daily") or []
+    monthly = payload.get("monthly") or []
+    reference = (daily[-1] if daily else {}).get("date", "")
+    month_key = reference[:7]
+    month = next((row for row in monthly if row.get("period") == month_key), {})
+    stamp = reference.replace("-", "")
+    excel_path = WEB / f"relatorio_analitico_contas_abertas_{stamp}.xlsx"
+    if not excel_path.exists():
+        excel_path = WEB / "relatorio_analitico_contas_abertas.xlsx"
+    excel_rows = None
+    excel_unique_cnpj = None
+    if excel_path.exists():
+        try:
+            df = pd.read_excel(excel_path, sheet_name="Contas abertas", dtype=str)
+            excel_rows = int(len(df))
+            excel_unique_cnpj = int(df["CNPJ"].nunique()) if "CNPJ" in df.columns else None
+        except Exception:
+            excel_rows = "erro ao ler"
+            excel_unique_cnpj = "erro ao ler"
+    opened_in_period = int(month.get("openedInPeriod", 0) or 0)
+    return {
+        "status": "ok",
+        "generatedAt": payload.get("generatedAt"),
+        "referenceDate": reference,
+        "referenceMonth": month.get("label") or month_key,
+        "monthly": {
+            "convertedByIndicationDate": int(month.get("opened", 0) or 0),
+            "openedByAccountDate": opened_in_period,
+            "pixConvertedByIndicationDate": int(month.get("pixOpen", 0) or 0),
+            "pixOpenedByAccountDate": int(month.get("pixOpenInPeriod", 0) or 0),
+            "indicated": int(month.get("indicated", 0) or 0),
+            "interested": int(month.get("interactions", 0) or 0),
+            "positiveSent": int(month.get("positiveSent", 0) or 0),
+        },
+        "analyticExcel": {
+            "file": excel_path.name if excel_path.exists() else None,
+            "rows": excel_rows,
+            "uniqueCnpj": excel_unique_cnpj,
+            "matchesOpenedByAccountDate": excel_unique_cnpj == opened_in_period,
+        },
+        "rulesVersion": "conversion_by_indication_date_and_opened_by_account_date",
+    }
+
+
 def archive_upload(field, filename, content):
     IMPORT_ARCHIVE.mkdir(parents=True, exist_ok=True)
     stamp = __import__("datetime").datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -410,6 +458,20 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         return False
 
     def do_GET(self):
+        if self.path.startswith("/health"):
+            try:
+                body = json.dumps(dashboard_health_payload(), ensure_ascii=False, indent=2)
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.end_headers()
+                self.wfile.write(body.encode("utf-8"))
+            except Exception:
+                self.send_response(500)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.end_headers()
+                body = json.dumps({"status": "error", "detail": traceback.format_exc()}, ensure_ascii=False)
+                self.wfile.write(body.encode("utf-8"))
+            return
         if self.path.startswith("/envios-dia"):
             if not self.require_auth("master"):
                 return
