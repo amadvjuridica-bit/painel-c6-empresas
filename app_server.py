@@ -6,6 +6,10 @@ import json
 import os
 import smtplib
 import traceback
+import urllib.error
+import urllib.parse
+import urllib.request
+import uuid
 from email.message import EmailMessage
 from email.utils import formataddr, formatdate, getaddresses, make_msgid
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
@@ -28,6 +32,8 @@ SMTP_PORT = int(os.environ.get("SMTP_PORT", "465"))
 SMTP_USER = os.environ.get("SMTP_USER", "am@amcob.com.br")
 SMTP_PASS = os.environ.get("SMTP_PASS", "")
 SMTP_CC = os.environ.get("SMTP_CC", "am@amcob.com.br")
+REMOTE_BASE_URL = os.environ.get("REMOTE_BASE_URL", "https://painel-c6-empresas.onrender.com").rstrip("/")
+SYNC_ENABLED = os.environ.get("SYNC_ENABLED", "1").strip().lower() not in {"0", "false", "no"}
 
 CONSOLIDATED = {
     "envios": DATA_STORE / "envios_historico.csv",
@@ -74,6 +80,107 @@ def reload_processing_modules():
 def split_addresses(value):
     raw = (value or "").replace(";", ",")
     return [addr for _, addr in getaddresses([raw]) if addr]
+
+
+def basic_auth_header(user, password):
+    token = base64.b64encode(f"{user}:{password}".encode("utf-8")).decode("ascii")
+    return f"Basic {token}"
+
+
+def web_manifest_files():
+    allowed_suffixes = {".js", ".pdf", ".xlsx"}
+    files = []
+    if not WEB.exists():
+        return files
+    for path in sorted(WEB.iterdir()):
+        if path.is_file() and path.suffix.lower() in allowed_suffixes:
+            files.append(
+                {
+                    "name": path.name,
+                    "size": path.stat().st_size,
+                    "mtime": int(path.stat().st_mtime),
+                }
+            )
+    return files
+
+
+def remote_same_as_request(headers):
+    if not REMOTE_BASE_URL:
+        return True
+    host = (headers.get("Host") or "").split(":", 1)[0].lower()
+    remote_host = (urllib.parse.urlparse(REMOTE_BASE_URL).hostname or "").lower()
+    return bool(host and remote_host and host == remote_host)
+
+
+def should_proxy_upload_to_remote(headers):
+    if not SYNC_ENABLED or not REMOTE_BASE_URL or not MASTER_PASS:
+        return False
+    return not remote_same_as_request(headers)
+
+
+def multipart_form_data(files):
+    boundary = f"----C6Sync{uuid.uuid4().hex}"
+    chunks = []
+    for field, item in files.items():
+        chunks.append(f"--{boundary}\r\n".encode("utf-8"))
+        chunks.append(
+            (
+                f'Content-Disposition: form-data; name="{field}"; '
+                f'filename="{item["filename"]}"\r\n'
+                "Content-Type: application/octet-stream\r\n\r\n"
+            ).encode("utf-8")
+        )
+        chunks.append(item["content"])
+        chunks.append(b"\r\n")
+    chunks.append(f"--{boundary}--\r\n".encode("utf-8"))
+    return boundary, b"".join(chunks)
+
+
+def http_request(url, method="GET", data=None, content_type=None, timeout=600):
+    headers = {"Authorization": basic_auth_header(MASTER_USER, MASTER_PASS)}
+    if content_type:
+        headers["Content-Type"] = content_type
+    request = urllib.request.Request(url, data=data, headers=headers, method=method)
+    with urllib.request.urlopen(request, timeout=timeout) as response:
+        return response.status, response.read()
+
+
+def proxy_upload_to_remote(uploaded):
+    boundary, body = multipart_form_data(uploaded)
+    status, content = http_request(
+        f"{REMOTE_BASE_URL}/upload",
+        method="POST",
+        data=body,
+        content_type=f"multipart/form-data; boundary={boundary}",
+        timeout=1200,
+    )
+    if status >= 400:
+        raise RuntimeError(f"Falha ao importar no online: HTTP {status}")
+    mirror_remote_artifacts()
+    return content
+
+
+def mirror_remote_artifacts():
+    if not SYNC_ENABLED or not REMOTE_BASE_URL or not MASTER_PASS:
+        return []
+    status, content = http_request(f"{REMOTE_BASE_URL}/sync/manifest", timeout=120)
+    if status != 200:
+        raise RuntimeError(f"Falha ao ler manifesto online: HTTP {status}")
+    manifest = json.loads(content.decode("utf-8"))
+    WEB.mkdir(parents=True, exist_ok=True)
+    downloaded = []
+    for item in manifest.get("files", []):
+        name = Path(item.get("name", "")).name
+        if not name or name != item.get("name"):
+            continue
+        target = WEB / name
+        if target.exists() and target.stat().st_size == int(item.get("size", -1)):
+            continue
+        file_status, file_content = http_request(f"{REMOTE_BASE_URL}/sync/file/{urllib.parse.quote(name)}", timeout=180)
+        if file_status == 200:
+            target.write_bytes(file_content)
+            downloaded.append(name)
+    return downloaded
 
 
 def send_pdf_email(message, recipients):
@@ -483,6 +590,28 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         return False
 
     def do_GET(self):
+        if self.path.startswith("/sync/manifest"):
+            if not self.require_auth("master"):
+                return
+            body = json.dumps({"files": web_manifest_files()}, ensure_ascii=False, indent=2)
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.end_headers()
+            self.wfile.write(body.encode("utf-8"))
+            return
+        if self.path.startswith("/sync/file/"):
+            if not self.require_auth("master"):
+                return
+            name = Path(urllib.parse.unquote(self.path.split("/sync/file/", 1)[1].split("?", 1)[0])).name
+            target = WEB / name
+            if not target.exists() or not target.is_file():
+                self.send_error(404)
+                return
+            self.send_response(200)
+            self.send_header("Content-Type", "application/octet-stream")
+            self.end_headers()
+            self.wfile.write(target.read_bytes())
+            return
         if self.path.startswith("/health"):
             try:
                 body = json.dumps(dashboard_health_payload(), ensure_ascii=False, indent=2)
@@ -511,10 +640,20 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         elif self.path.startswith("/master"):
             if not self.require_auth("master"):
                 return
+            if should_proxy_upload_to_remote(self.headers):
+                try:
+                    mirror_remote_artifacts()
+                except Exception:
+                    pass
             self.path = "/master.html"
         elif self.path in {"/", "/index.html", "/monitor", "/banco"}:
             if not self.require_auth("monitor"):
                 return
+            if should_proxy_upload_to_remote(self.headers):
+                try:
+                    mirror_remote_artifacts()
+                except Exception:
+                    pass
             self.path = "/index.html"
         return super().do_GET()
 
@@ -538,13 +677,41 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                 "leads": "leads.xlsx",
                 "visao": "visao.xlsx",
             }
-            saved = {}
+            uploaded = {}
             for field, filename in required.items():
                 item = form[field] if field in form else None
                 if item is None or not getattr(item, "file", None):
                     self.send_error(400, f"Arquivo ausente: {field}")
                     return
                 content = item.file.read()
+                uploaded[field] = {"filename": filename, "content": content}
+
+            if should_proxy_upload_to_remote(self.headers):
+                proxy_upload_to_remote(uploaded)
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.end_headers()
+                body = """
+                <!doctype html><meta charset="utf-8">
+                <link rel="stylesheet" href="/styles.css">
+                <main class="master-main"><section class="panel master-panel">
+                <p class="eyebrow">Importação sincronizada</p>
+                <h1>Painel online atualizado</h1>
+                <p>Os arquivos foram enviados ao painel online oficial e este ambiente local foi espelhado com os artefatos publicados.</p>
+                <p>
+                  <a class="link-button" href="/index.html">Abrir painel local</a>
+                  <a class="link-button" href="https://painel-c6-empresas.onrender.com/master">Abrir Master online</a>
+                  <a class="link-button" href="https://painel-c6-empresas.onrender.com/banco">Abrir Banco online</a>
+                </p>
+                </section></main>
+                """
+                self.wfile.write(body.encode("utf-8"))
+                return
+
+            saved = {}
+            for field, item in uploaded.items():
+                content = item["content"]
+                filename = item["filename"]
                 target = UPLOADS / filename
                 target.write_bytes(content)
                 archive_upload(field, filename, content)
