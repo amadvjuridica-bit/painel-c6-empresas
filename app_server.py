@@ -1,5 +1,6 @@
 import base64
 import cgi
+import gzip
 import html
 import importlib
 import json
@@ -21,6 +22,7 @@ WEB = ROOT / "web"
 UPLOADS = Path(os.environ.get("UPLOADS_DIR", ROOT / "uploads")).resolve()
 DATA_STORE = Path(os.environ.get("DATA_DIR", ROOT / "data_store")).resolve()
 IMPORT_ARCHIVE = DATA_STORE / "imports"
+DATA_SEED = ROOT / "data_seed"
 ENVIOS_DAY_LAST = DATA_STORE / "envios_dia_ultima_consulta.json"
 
 MASTER_USER = os.environ.get("MASTER_USER", "master")
@@ -289,6 +291,21 @@ def archive_upload(field, filename, content):
 
 def seed_history_from_existing_uploads():
     DATA_STORE.mkdir(exist_ok=True)
+    packaged_seeds = {
+        "envios": (DATA_SEED / "envios_historico.csv.gz", CONSOLIDATED["envios"]),
+        "botoes": (DATA_SEED / "botoes_historico.csv.gz", CONSOLIDATED["botoes"]),
+        "leads": (DATA_SEED / "leads_atual.xlsx", CONSOLIDATED["leads"]),
+        "visao": (DATA_SEED / "visao_atual.xlsx", CONSOLIDATED["visao"]),
+    }
+    for _, (source, target) in packaged_seeds.items():
+        if source.exists() and not target.exists():
+            if source.suffix.lower() == ".gz":
+                with gzip.open(source, "rb") as f_in, target.open("wb") as f_out:
+                    for chunk in iter(lambda: f_in.read(1024 * 1024), b""):
+                        f_out.write(chunk)
+            else:
+                target.write_bytes(source.read_bytes())
+
     seeds = {
         "envios": (UPLOADS / "envios.csv", CONSOLIDATED["envios"]),
         "botoes": (UPLOADS / "botoes.csv", CONSOLIDATED["botoes"]),
@@ -297,6 +314,24 @@ def seed_history_from_existing_uploads():
     }
     for _, (source, target) in seeds.items():
         if source.exists() and not target.exists():
+            target.write_bytes(source.read_bytes())
+
+
+def refresh_seed_snapshot():
+    DATA_SEED.mkdir(exist_ok=True)
+    csv_seeds = {
+        CONSOLIDATED["envios"]: DATA_SEED / "envios_historico.csv.gz",
+        CONSOLIDATED["botoes"]: DATA_SEED / "botoes_historico.csv.gz",
+    }
+    for source, target in csv_seeds.items():
+        if source.exists():
+            with source.open("rb") as f_in, gzip.open(target, "wb", compresslevel=6) as f_out:
+                for chunk in iter(lambda: f_in.read(1024 * 1024), b""):
+                    f_out.write(chunk)
+    for key in ("leads", "visao"):
+        source = CONSOLIDATED[key]
+        target = DATA_SEED / source.name
+        if source.exists():
             target.write_bytes(source.read_bytes())
 
 
@@ -724,6 +759,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             build_data.FILES["leads"] = consolidated["leads"]
             build_data.FILES["visao"] = consolidated["visao"]
             build_data.main()
+            refresh_seed_snapshot()
             create_report_pdf.build_pdf()
             create_report_pdf_v2.build_pdf()
         except Exception as exc:
