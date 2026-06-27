@@ -162,6 +162,39 @@ def proxy_upload_to_remote(uploaded):
     return content
 
 
+def publish_remote_snapshot(refresh=True):
+    if not SYNC_ENABLED or not REMOTE_BASE_URL or not MASTER_PASS:
+        return {"published": 0}
+    if refresh:
+        refresh_seed_snapshot()
+    allowed_web_suffixes = {".js", ".pdf", ".xlsx"}
+    payload = {}
+    for path in sorted(WEB.iterdir() if WEB.exists() else []):
+        if path.is_file() and path.suffix.lower() in allowed_web_suffixes:
+            payload[f"web__{path.name}"] = {"filename": path.name, "content": path.read_bytes()}
+    seed_names = {
+        "envios_historico.csv.gz",
+        "botoes_historico.csv.gz",
+        "leads_atual.xlsx",
+        "visao_atual.xlsx",
+    }
+    for name in sorted(seed_names):
+        path = DATA_SEED / name
+        if path.exists():
+            payload[f"seed__{name}"] = {"filename": name, "content": path.read_bytes()}
+    boundary, body = multipart_form_data(payload)
+    status, content = http_request(
+        f"{REMOTE_BASE_URL}/sync/publish",
+        method="POST",
+        data=body,
+        content_type=f"multipart/form-data; boundary={boundary}",
+        timeout=1200,
+    )
+    if status >= 400:
+        raise RuntimeError(f"Falha ao publicar no online: HTTP {status}")
+    return json.loads(content.decode("utf-8"))
+
+
 def mirror_remote_artifacts():
     if not SYNC_ENABLED or not REMOTE_BASE_URL or not MASTER_PASS:
         return []
@@ -697,10 +730,91 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             return self.handle_envios_day()
         if self.path == "/send-email":
             return self.handle_send_email()
+        if self.path == "/sync/publish":
+            if not self.require_auth("master"):
+                return
+            try:
+                form = cgi.FieldStorage(fp=self.rfile, headers=self.headers, environ={"REQUEST_METHOD": "POST"})
+                WEB.mkdir(exist_ok=True)
+                DATA_SEED.mkdir(exist_ok=True)
+                DATA_STORE.mkdir(exist_ok=True)
+                published = []
+                allowed_web_suffixes = {".js", ".pdf", ".xlsx"}
+                allowed_seed_names = {
+                    "envios_historico.csv.gz",
+                    "botoes_historico.csv.gz",
+                    "leads_atual.xlsx",
+                    "visao_atual.xlsx",
+                }
+                for key in form.keys():
+                    item = form[key]
+                    if isinstance(item, list):
+                        items = item
+                    else:
+                        items = [item]
+                    for part in items:
+                        if not getattr(part, "file", None):
+                            continue
+                        content = part.file.read()
+                        if key.startswith("web__"):
+                            name = Path(key.split("web__", 1)[1]).name
+                            if not name or Path(name).suffix.lower() not in allowed_web_suffixes:
+                                continue
+                            (WEB / name).write_bytes(content)
+                            published.append(f"web/{name}")
+                        elif key.startswith("seed__"):
+                            name = Path(key.split("seed__", 1)[1]).name
+                            if name not in allowed_seed_names:
+                                continue
+                            seed_path = DATA_SEED / name
+                            seed_path.write_bytes(content)
+                            if name == "envios_historico.csv.gz":
+                                with gzip.open(seed_path, "rb") as f_in, CONSOLIDATED["envios"].open("wb") as f_out:
+                                    for chunk in iter(lambda: f_in.read(1024 * 1024), b""):
+                                        f_out.write(chunk)
+                            elif name == "botoes_historico.csv.gz":
+                                with gzip.open(seed_path, "rb") as f_in, CONSOLIDATED["botoes"].open("wb") as f_out:
+                                    for chunk in iter(lambda: f_in.read(1024 * 1024), b""):
+                                        f_out.write(chunk)
+                            elif name == "leads_atual.xlsx":
+                                CONSOLIDATED["leads"].write_bytes(content)
+                            elif name == "visao_atual.xlsx":
+                                CONSOLIDATED["visao"].write_bytes(content)
+                            published.append(f"data_seed/{name}")
+                body = json.dumps({"status": "ok", "published": published}, ensure_ascii=False)
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.end_headers()
+                self.wfile.write(body.encode("utf-8"))
+            except Exception:
+                self.send_response(500)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.end_headers()
+                body = json.dumps({"status": "error", "detail": traceback.format_exc()}, ensure_ascii=False)
+                self.wfile.write(body.encode("utf-8"))
+            return
         if self.path != "/upload":
             self.send_error(404)
             return
         if not self.require_auth("master"):
+            return
+        if remote_same_as_request(self.headers):
+            self.send_response(409)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.end_headers()
+            body = """
+            <!doctype html><meta charset="utf-8">
+            <link rel="stylesheet" href="/styles.css">
+            <main class="master-main"><section class="panel master-panel">
+            <p class="eyebrow">Importação online bloqueada</p>
+            <h1>Use a importação local</h1>
+            <p>Este servidor online não deve processar a base pesada diretamente, pois isso pode exceder a memória do Render. Importe pelo app local; ele processa os arquivos e publica automaticamente o painel, PDFs, Excel e base consolidada no online.</p>
+            <p>
+              <a class="link-button" href="/master">Voltar ao Master online</a>
+            </p>
+            </section></main>
+            """
+            self.wfile.write(body.encode("utf-8"))
             return
 
         try:
@@ -720,28 +834,6 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                     return
                 content = item.file.read()
                 uploaded[field] = {"filename": filename, "content": content}
-
-            if should_proxy_upload_to_remote(self.headers):
-                proxy_upload_to_remote(uploaded)
-                self.send_response(200)
-                self.send_header("Content-Type", "text/html; charset=utf-8")
-                self.end_headers()
-                body = """
-                <!doctype html><meta charset="utf-8">
-                <link rel="stylesheet" href="/styles.css">
-                <main class="master-main"><section class="panel master-panel">
-                <p class="eyebrow">Importação sincronizada</p>
-                <h1>Painel online atualizado</h1>
-                <p>Os arquivos foram enviados ao painel online oficial e este ambiente local foi espelhado com os artefatos publicados.</p>
-                <p>
-                  <a class="link-button" href="/index.html">Abrir painel local</a>
-                  <a class="link-button" href="https://painel-c6-empresas.onrender.com/master">Abrir Master online</a>
-                  <a class="link-button" href="https://painel-c6-empresas.onrender.com/banco">Abrir Banco online</a>
-                </p>
-                </section></main>
-                """
-                self.wfile.write(body.encode("utf-8"))
-                return
 
             saved = {}
             for field, item in uploaded.items():
@@ -765,6 +857,9 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                 traceback.print_exc()
             create_report_pdf.build_pdf()
             create_report_pdf_v2.build_pdf()
+            publish_result = None
+            if should_proxy_upload_to_remote(self.headers):
+                publish_result = publish_remote_snapshot(refresh=False)
         except Exception as exc:
             details = html.escape(traceback.format_exc())
             self.send_response(500)
@@ -789,6 +884,10 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         self.end_headers()
         envios_fmt = f"{consolidated['envios_rows']:,}".replace(",", ".")
         botoes_fmt = f"{consolidated['botoes_rows']:,}".replace(",", ".")
+        sync_message = ""
+        if publish_result is not None:
+            published_count = len(publish_result.get("published") or [])
+            sync_message = f"<p>Online sincronizado com {published_count} arquivos publicados, sem reprocessar a base pesada no Render.</p>"
         body = f"""
         <!doctype html><meta charset="utf-8">
         <link rel="stylesheet" href="/styles.css">
@@ -796,6 +895,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         <p class="eyebrow">Importação concluída</p>
         <h1>Painel atualizado</h1>
         <p>Os arquivos foram processados com sucesso e incorporados à base histórica.</p>
+        {sync_message}
         <p>Envios no histórico: {envios_fmt} | Interações no histórico: {botoes_fmt}</p>
         <p>
           <a class="link-button" href="/index.html">Abrir painel</a>
