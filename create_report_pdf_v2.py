@@ -237,6 +237,7 @@ def build_pdf():
                 ("Abertas no período", fmt(selected["openedInPeriod"]), "pela data da abertura"),
                 ("Pix conv.", fmt(selected["pixOpen"]), f"{pct(selected['pixRate'])} das convertidas"),
                 ("Pix abertas", fmt(selected["pixOpenInPeriod"]), f"{pct(selected['pixInPeriodRate'])} das abertas"),
+                ("Desacordo comercial", fmt(selected.get("commercialDisagreement", 0)), "status no arquivo de leads"),
                 ("% conversão mês", pct(monthly["openingRate"]), f"{fmt(monthly['opened'])} conversões"),
             ]
         )
@@ -252,7 +253,8 @@ def build_pdf():
             f"{fmt(selected['interactions'])} corresponderam a contatos interessados. "
             f"Também foram identificados {fmt(selected['indicated'])} leads enviados, "
             f"{fmt(selected['opened'])} contas convertidas pela data original da indicação e "
-            f"{fmt(selected['openedInPeriod'])} contas abertas pela data real de abertura.",
+            f"{fmt(selected['openedInPeriod'])} contas abertas pela data real de abertura. "
+            f"No mesmo recorte diário, {fmt(selected.get('commercialDisagreement', 0))} leads constaram como desacordo comercial.",
             styles["V2Body"],
         )
     )
@@ -277,6 +279,22 @@ def build_pdf():
     for r in daily:
         daily_table.append([date_pt(r["date"]), fmt(r["sent"]), fmt(r["qualificationSent"]), fmt(r["positiveSent"]), fmt(r["undelivered"]), fmt(r["buttonInteractions"]), fmt(r["interactions"]), fmt(r["indicated"]), fmt(r["opened"]), fmt(r["openedInPeriod"]), fmt(r["pixOpen"]), fmt(r["pixOpenInPeriod"]), pct(r["buttonInteractionRate"]), pct(r["interactionRate"]), pct(r["openingRate"])])
     story.append(table(daily_table, [1.5 * cm, 1.6 * cm, 1.6 * cm, 1.6 * cm, 1.35 * cm, 1.6 * cm, 1.7 * cm, 1.3 * cm, 1.3 * cm, 1.3 * cm, 1.2 * cm, 1.2 * cm, 1.25 * cm, 1.35 * cm, 1.25 * cm], 5.2))
+
+    story.append(Paragraph("Desacordo comercial", styles["V2Section"]))
+    disagreement_table = [["Data", "Desacordo comercial", "Variação vs dia anterior", "Leads indicados", "% sobre leads"]]
+    for r in daily:
+        leads = int(r.get("indicated", 0) or 0)
+        disagreement = int(r.get("commercialDisagreement", 0) or 0)
+        disagreement_table.append(
+            [
+                date_pt(r["date"]),
+                fmt(disagreement),
+                fmt(r.get("commercialDisagreementDelta", 0)),
+                fmt(leads),
+                pct((disagreement / leads * 100) if leads else 0),
+            ]
+        )
+    story.append(table(disagreement_table, [4.8 * cm, 4.8 * cm, 5.2 * cm, 4.8 * cm, 4.8 * cm], 7.0))
 
     story.append(KeepTogether([Paragraph("Melhores horários de retorno", styles["V2Section"]), hour_chart(payload["hours"])]))
 

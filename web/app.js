@@ -104,6 +104,7 @@ function renderKpis() {
     { label: "Leads enviados", value: day.indicated, delta: day.indicatedDelta },
     { label: "Contas convertidas", value: day.opened, delta: day.openedDelta },
     { label: "Abertas no período", value: day.openedInPeriod, delta: day.openedInPeriodDelta },
+    { label: "Desacordo comercial", value: day.commercialDisagreement, delta: day.commercialDisagreementDelta },
     { label: "Com Pix", value: day.pixOpen, delta: day.pixOpenDelta },
     { label: "% interações", value: day.buttonInteractionRate, previous: prev?.buttonInteractionRate, percent: true },
     { label: "% interesse", value: day.interactionRate, previous: prev?.interactionRate, percent: true },
@@ -198,6 +199,7 @@ function renderMonthTotals() {
     ["Leads", row.indicated],
     ["Convertidas", row.opened],
     ["Abertas no período", row.openedInPeriod],
+    ["Desacordo comercial", row.commercialDisagreement],
     ["Pix", row.pixOpen],
     ["Conversão", pct(row.openingRate)],
   ]
@@ -232,12 +234,27 @@ function renderComparison() {
       { label: "Leads", key: "indicated", num: true },
       { label: "Convertidas", key: "opened", num: true },
       { label: "Abertas", key: "openedInPeriod", num: true },
+      { label: "Desacordo", key: "commercialDisagreement", num: true },
       { label: "Pix", key: "pixOpen", num: true },
       { label: "% interações", value: (r) => pct(r.buttonInteractionRate) },
       { label: "% interesse", value: (r) => pct(r.interactionRate) },
       { label: "% conversão", value: (r) => pct(r.openingRate) },
       { label: "Variação conversões", key: "openedDelta", num: true },
       { label: "Variação abertas", key: "openedInPeriodDelta", num: true },
+    ],
+    monthRows()
+  );
+}
+
+function renderCommercialDisagreement() {
+  renderTable(
+    "commercialDisagreementTable",
+    [
+      { label: "Data", value: (r) => datePt(r.date) },
+      { label: "Desacordo comercial", key: "commercialDisagreement", num: true },
+      { label: "Variação vs dia anterior", key: "commercialDisagreementDelta", num: true },
+      { label: "Leads indicados", key: "indicated", num: true },
+      { label: "% sobre leads", value: (r) => pct((r.commercialDisagreement / Math.max(r.indicated, 1)) * 100) },
     ],
     monthRows()
   );
@@ -291,6 +308,7 @@ function renderExecutive() {
     ["Interações", `${fmt(day.buttonInteractions)} interações totais, equivalentes a ${pct(day.buttonInteractionRate)} dos envios positivos.`],
     ["Conversão", `${pct(day.openingRate)} dos leads viraram contas convertidas pela data da indicação.`],
     ["Aberturas", `${fmt(day.openedInPeriod)} contas foram abertas pela data real de abertura.`],
+    ["Desacordo comercial", `${fmt(day.commercialDisagreement)} leads constam como desacordo comercial na data selecionada.`],
     ["Regra de data", "Conversão usa data da indicação; aberturas do período usam data da abertura da conta."],
     ["Acumulado mensal", `${fmt(month.sent)} envios, ${fmt(month.indicated)} leads, ${fmt(month.opened)} conversões e ${fmt(month.openedInPeriod)} aberturas.`],
   ]
@@ -311,6 +329,7 @@ function tableData(kind) {
     { etapa: "Leads enviados", valor: day.indicated },
     { etapa: "Contas convertidas", valor: day.opened },
     { etapa: "Abertas no período", valor: day.openedInPeriod },
+    { etapa: "Desacordo comercial", valor: day.commercialDisagreement },
     { etapa: "Com chave Pix", valor: day.pixOpen },
   ];
   const mapRows = (rows) =>
@@ -326,6 +345,7 @@ function tableData(kind) {
       leads_enviados: r.indicated,
       contas_convertidas: r.opened,
       contas_abertas_periodo: r.openedInPeriod,
+      desacordo_comercial: r.commercialDisagreement,
       pix: r.pixOpen,
       perc_interesse: r.interactionRate,
       perc_interacoes_sobre_positivos: r.buttonInteractionRate,
@@ -333,6 +353,15 @@ function tableData(kind) {
     }));
   if (kind === "funnel") return funnel;
   if (kind === "daily" || kind === "comparison") return mapRows(monthRows());
+  if (kind === "commercialDisagreement") {
+    return monthRows().map((r) => ({
+      data: r.date,
+      desacordo_comercial: r.commercialDisagreement,
+      variacao_dia_anterior: r.commercialDisagreementDelta,
+      leads_indicados: r.indicated,
+      perc_sobre_leads: (r.commercialDisagreement / Math.max(r.indicated, 1)) * 100,
+    }));
+  }
   if (kind === "weekly") return mapRows(DATA.weekly.filter((r) => monthRows().some((d) => d.week === r.period)));
   if (kind === "monthly") return mapRows([month]);
   if (kind === "hours") return DATA.hours;
@@ -347,6 +376,7 @@ function downloadExcel(kind) {
     funnel: "Funil do dia",
     daily: "Evolução diária",
     comparison: "Comparativo dia a dia",
+    commercialDisagreement: "Desacordo comercial",
     weekly: "Evolução semanal",
     monthly: "Resumo mensal",
     hours: "Análise de horários",
@@ -399,6 +429,7 @@ function renderAll() {
   renderWeekly();
   renderMonthTotals();
   renderComparison();
+  renderCommercialDisagreement();
   renderHours();
   renderAccounts();
   renderExecutive();

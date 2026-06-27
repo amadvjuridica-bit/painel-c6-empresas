@@ -251,11 +251,14 @@ def build_daily(envios, envios_all, botoes, leads, visao):
         & envios_all["status_norm"].isin(POSITIVE_SEND_STATUS)
     )
     qualification_by_day = envios_all[qualification_mask].groupby("date").size()
+    disagreement_mask = leads["STATUS_ABERTURA_CONTA"].fillna("").str.strip().str.casefold().eq("desacordo comercial")
+    disagreement_by_day = leads[disagreement_mask].groupby("date_indicacao")["cnpj"].nunique()
     dates = sorted(
         set(envios["date"].dropna())
         | set(qualification_by_day.index.dropna())
         | set(account_by_day.index.dropna())
         | set(account_by_open_day.index.dropna())
+        | set(disagreement_by_day.index.dropna())
     )
 
     for d in dates:
@@ -274,6 +277,7 @@ def build_daily(envios, envios_all, botoes, leads, visao):
         pix_open = int(pix_by_day.get(d, 0))
         opened_in_period = int(account_by_open_day.get(d, 0))
         pix_open_in_period = int(pix_by_open_day.get(d, 0))
+        commercial_disagreement = int(disagreement_by_day.get(d, 0))
         rows.append(
             {
                 "date": d,
@@ -292,6 +296,7 @@ def build_daily(envios, envios_all, botoes, leads, visao):
                 "pixOpen": pix_open,
                 "openedInPeriod": opened_in_period,
                 "pixOpenInPeriod": pix_open_in_period,
+                "commercialDisagreement": commercial_disagreement,
                 "withoutPix": max(opened - pix_open, 0),
                 "withoutPixInPeriod": max(opened_in_period - pix_open_in_period, 0),
                 "positiveRate": pct(positive, sent),
@@ -310,7 +315,7 @@ def build_daily(envios, envios_all, botoes, leads, visao):
 
     for i, row in enumerate(rows):
         prev = rows[i - 1] if i > 0 else None
-        for key in ["sent", "qualificationSent", "positiveSent", "undelivered", "buttonInteractions", "interactions", "indicated", "opened", "pixOpen", "openedInPeriod", "pixOpenInPeriod", "positiveRate", "qualificationRate", "buttonInteractionRate", "interactionRate", "intentShareRate", "indicationRate", "openingRate", "pixRate", "pixInPeriodRate"]:
+        for key in ["sent", "qualificationSent", "positiveSent", "undelivered", "buttonInteractions", "interactions", "indicated", "opened", "pixOpen", "openedInPeriod", "pixOpenInPeriod", "commercialDisagreement", "positiveRate", "qualificationRate", "buttonInteractionRate", "interactionRate", "intentShareRate", "indicationRate", "openingRate", "pixRate", "pixInPeriodRate"]:
             row[f"{key}Delta"] = round(row[key] - (prev[key] if prev else 0), 2)
     return rows
 
@@ -321,10 +326,10 @@ def aggregate(rows, by):
         key = row[by]
         acc = groups.setdefault(
             key,
-            {"period": key, "sent": 0, "qualificationSent": 0, "positiveSent": 0, "undelivered": 0, "delivered": 0, "read": 0, "buttonInteractions": 0, "interactions": 0, "indicated": 0, "opened": 0, "pixOpen": 0, "openedInPeriod": 0, "pixOpenInPeriod": 0, "dates": []},
+            {"period": key, "sent": 0, "qualificationSent": 0, "positiveSent": 0, "undelivered": 0, "delivered": 0, "read": 0, "buttonInteractions": 0, "interactions": 0, "indicated": 0, "opened": 0, "pixOpen": 0, "openedInPeriod": 0, "pixOpenInPeriod": 0, "commercialDisagreement": 0, "dates": []},
         )
         acc["dates"].append(row["date"])
-        for metric in ["sent", "qualificationSent", "positiveSent", "undelivered", "delivered", "read", "buttonInteractions", "interactions", "indicated", "opened", "pixOpen", "openedInPeriod", "pixOpenInPeriod"]:
+        for metric in ["sent", "qualificationSent", "positiveSent", "undelivered", "delivered", "read", "buttonInteractions", "interactions", "indicated", "opened", "pixOpen", "openedInPeriod", "pixOpenInPeriod", "commercialDisagreement"]:
             acc[metric] += row[metric]
     out = []
     for key in sorted(groups):
