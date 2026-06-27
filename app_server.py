@@ -759,7 +759,10 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             build_data.FILES["leads"] = consolidated["leads"]
             build_data.FILES["visao"] = consolidated["visao"]
             build_data.main()
-            refresh_seed_snapshot()
+            try:
+                refresh_seed_snapshot()
+            except Exception:
+                traceback.print_exc()
             create_report_pdf.build_pdf()
             create_report_pdf_v2.build_pdf()
         except Exception as exc:
