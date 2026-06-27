@@ -162,26 +162,50 @@ def proxy_upload_to_remote(uploaded):
     return content
 
 
-def publish_remote_snapshot(refresh=True):
+def current_reference_stamp():
+    _, stamp = report_reference_date()
+    return stamp
+
+
+def publish_remote_snapshot(refresh=True, include_seed=False):
     if not SYNC_ENABLED or not REMOTE_BASE_URL or not MASTER_PASS:
         return {"published": 0}
     if refresh:
         refresh_seed_snapshot()
-    allowed_web_suffixes = {".js", ".pdf", ".xlsx"}
     payload = {}
-    for path in sorted(WEB.iterdir() if WEB.exists() else []):
-        if path.is_file() and path.suffix.lower() in allowed_web_suffixes:
-            payload[f"web__{path.name}"] = {"filename": path.name, "content": path.read_bytes()}
-    seed_names = {
-        "envios_historico.csv.gz",
-        "botoes_historico.csv.gz",
-        "leads_atual.xlsx",
-        "visao_atual.xlsx",
+    stamp = current_reference_stamp()
+    web_names = {
+        "index.html",
+        "app.js",
+        "styles.css",
+        "data.js",
+        "relatorio_c6_empresas.pdf",
+        "relatorio_c6_empresas_v2.pdf",
+        "relatorio_analitico_contas_abertas.xlsx",
     }
-    for name in sorted(seed_names):
-        path = DATA_SEED / name
+    if stamp:
+        web_names.update(
+            {
+                f"relatorio_c6_empresas_{stamp}.pdf",
+                f"relatorio_c6_empresas_v2_{stamp}.pdf",
+                f"relatorio_analitico_contas_abertas_{stamp}.xlsx",
+            }
+        )
+    for name in sorted(web_names):
+        path = WEB / name
         if path.exists():
-            payload[f"seed__{name}"] = {"filename": name, "content": path.read_bytes()}
+            payload[f"web__{path.name}"] = {"filename": path.name, "content": path.read_bytes()}
+    if include_seed:
+        seed_names = {
+            "envios_historico.csv.gz",
+            "botoes_historico.csv.gz",
+            "leads_atual.xlsx",
+            "visao_atual.xlsx",
+        }
+        for name in sorted(seed_names):
+            path = DATA_SEED / name
+            if path.exists():
+                payload[f"seed__{name}"] = {"filename": name, "content": path.read_bytes()}
     boundary, body = multipart_form_data(payload)
     status, content = http_request(
         f"{REMOTE_BASE_URL}/sync/publish",
@@ -739,7 +763,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                 DATA_SEED.mkdir(exist_ok=True)
                 DATA_STORE.mkdir(exist_ok=True)
                 published = []
-                allowed_web_suffixes = {".js", ".pdf", ".xlsx"}
+                allowed_web_suffixes = {".html", ".css", ".js", ".pdf", ".xlsx"}
                 allowed_seed_names = {
                     "envios_historico.csv.gz",
                     "botoes_historico.csv.gz",
