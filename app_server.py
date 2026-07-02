@@ -732,20 +732,10 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         elif self.path.startswith("/master"):
             if not self.require_auth("master"):
                 return
-            if should_proxy_upload_to_remote(self.headers):
-                try:
-                    mirror_remote_artifacts()
-                except Exception:
-                    pass
             self.path = "/master.html"
         elif self.path in {"/", "/index.html", "/monitor", "/banco"}:
             if not self.require_auth("monitor"):
                 return
-            if should_proxy_upload_to_remote(self.headers):
-                try:
-                    mirror_remote_artifacts()
-                except Exception:
-                    pass
             self.path = "/index.html"
         return super().do_GET()
 
